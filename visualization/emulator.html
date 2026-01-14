@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Emulator Playground - MultiVehicle Tracking</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="emulator.css" />
+  </head>
+  <body>
+    <!-- Navigation -->
+    <nav class="navbar">
+      <div class="nav-container">
+        <div class="nav-brand">MultiVehicle Playground</div>
+        <div class="nav-links">
+          <a href="index.html" class="nav-link">Home</a>
+          <a href="showcase.html" class="nav-link">Showcase</a>
+          <a href="statistics.html" class="nav-link">Statistics</a>
+          <a href="emulator.html" class="nav-link active">Emulator</a>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="emulator-container">
+      <!-- Header -->
+      <div class="emulator-header">
+        <h1>Emulator Playground</h1>
+        <p class="subtitle">
+          Real-time multi-camera packet simulation with network chaos
+        </p>
+        <div class="connection-status" id="connectionStatus">
+          <span class="status-dot"></span>
+          <span class="status-text">Connecting...</span>
+        </div>
+      </div>
+
+      <!-- Network Configuration Panel -->
+      <div class="config-panel">
+        <h2>Network Configuration</h2>
+        <div class="config-grid">
+          <div class="config-item">
+            <label for="jitterSlider">Jitter (ms)</label>
+            <input
+              type="range"
+              id="jitterSlider"
+              min="0"
+              max="500"
+              value="120"
+            />
+            <span class="config-value" id="jitterValue">120ms</span>
+          </div>
+          <div class="config-item">
+            <label for="latencySlider">Base Latency (ms)</label>
+            <input
+              type="range"
+              id="latencySlider"
+              min="0"
+              max="1000"
+              value="60"
+            />
+            <span class="config-value" id="latencyValue">60ms</span>
+          </div>
+          <div class="config-item">
+            <label for="lossSlider">Packet Loss (%)</label>
+            <input type="range" id="lossSlider" min="0" max="50" value="1" />
+            <span class="config-value" id="lossValue">1%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Current Frame Visualization -->
+      <div class="visualization-panel">
+        <h2>Packet Arrival Visualization</h2>
+
+        <!-- Camera Columns -->
+        <div class="camera-columns">
+          <div class="camera-column" id="camera-c001">
+            <div class="camera-header">c001</div>
+            <div class="camera-word" id="word-c001">...</div>
+            <div class="camera-status" id="status-c001">Waiting</div>
+            <div class="camera-delay" id="delay-c001">-</div>
+          </div>
+          <div class="camera-column" id="camera-c002">
+            <div class="camera-header">c002</div>
+            <div class="camera-word" id="word-c002">...</div>
+            <div class="camera-status" id="status-c002">Waiting</div>
+            <div class="camera-delay" id="delay-c002">-</div>
+          </div>
+          <div class="camera-column" id="camera-c003">
+            <div class="camera-header">c003</div>
+            <div class="camera-word" id="word-c003">...</div>
+            <div class="camera-status" id="status-c003">Waiting</div>
+            <div class="camera-delay" id="delay-c003">-</div>
+          </div>
+          <div class="camera-column" id="camera-c004">
+            <div class="camera-header">c004</div>
+            <div class="camera-word" id="word-c004">...</div>
+            <div class="camera-status" id="status-c004">Waiting</div>
+            <div class="camera-delay" id="delay-c004">-</div>
+          </div>
+          <div class="camera-column" id="camera-c005">
+            <div class="camera-header">c005</div>
+            <div class="camera-word" id="word-c005">...</div>
+            <div class="camera-status" id="status-c005">Waiting</div>
+            <div class="camera-delay" id="delay-c005">-</div>
+          </div>
+        </div>
+
+        <!-- Sentence Display -->
+        <div class="sentence-display">
+          <div class="sentence-header">
+            <span id="currentTimestamp">Waiting for data...</span>
+          </div>
+          <div class="sentence-words" id="sentenceWords">
+            <span class="word waiting" id="sentence-c001">...</span>
+            <span class="word waiting" id="sentence-c002">...</span>
+            <span class="word waiting" id="sentence-c003">...</span>
+            <span class="word waiting" id="sentence-c004">...</span>
+            <span class="word waiting" id="sentence-c005">...</span>
+          </div>
+          <div class="decision-status" id="decisionStatus">
+            <span class="decision-badge">Waiting</span>
+            <span class="decision-info" id="decisionInfo">-</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Frame History -->
+      <div class="history-panel">
+        <h2>Recent Decisions</h2>
+        <div class="history-list" id="historyList">
+          <div class="history-empty">Waiting for decisions...</div>
+        </div>
+      </div>
+    </div>
+
+    <script src="emulator.js"></script>
+  </body>
+</html>

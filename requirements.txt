@@ -1,0 +1,19 @@
+# Core Dependencies
+numpy>=1.21.0
+shapely>=2.0.0
+opencv-python>=4.5.0
+matplotlib>=3.5.0
+
+# Web Framework & Server
+Flask>=2.0.0
+flask-cors>=3.0.10
+websockets>=10.0
+
+# Image Processing
+Pillow>=9.0.0
+
+# Async Support (usually included with Python 3.7+, but good to specify)
+# asyncio is part of standard library
+
+# Optional: For better performance
+# scipy>=1.7.0

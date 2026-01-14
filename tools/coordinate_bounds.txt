@@ -1,0 +1,47 @@
+
+================================================================================
+          COORDINATE BOUNDS ANALYSIS
+================================================================================
+
+TRACKING AREA BOUNDS:
+   Min X: 4,250,681.94
+   Max X: 4,252,644.36
+   Min Y: -9,072,490.53
+   Max Y: -9,072,212.38
+
+DIMENSIONS:
+   Width:  1,962.42 units
+   Height: 278.15 units
+
+CENTER POINT:
+   X: 4,251,663.15
+   Y: -9,072,351.46
+
+RECOMMENDED CAPTURE AREA (with 20% buffer):
+   Width:  2,354.90 units
+   Height: 333.78 units
+
+COORDINATE SYSTEM NOTES:
+   - Your coordinates appear to be in a PROJECTED coordinate system
+   - Format: 4,250,681.94 (not lat/lon)
+   - Likely UTM or similar projection
+
+TO FIND THIS LOCATION IN GOOGLE EARTH:
+
+   Option 1: If you know the lat/lon of your intersection
+   - Navigate to that location in Google Earth
+   - Zoom to show an area roughly 2,355 x 334 units
+
+   Option 2: Use existing ground plane image
+   - Check if 'unified_ground_plane_frame10.png' shows this area
+   - It might already be perfectly aligned!
+
+SAMPLE COORDINATES (for verification):
+   First detection: (4,252,557.94, -9,072,358.84)
+   Last detection:  (4,252,555.57, -9,072,365.10)
+
+NEXT STEPS:
+   1. Check 'unified_ground_plane_frame10.png' first
+   2. If not suitable, capture from Google Earth
+   3. Run 'python tools/alignment_verification.py' to verify alignment
+
