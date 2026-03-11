@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Showcase - MultiVehicle Playground</title>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=20260217d" />
     <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
   </head>
   <body>
@@ -29,11 +29,12 @@
         >
           <div class="control-group">
             <label class="control-label">Search Global ID</label>
-            <div style="display: flex; gap: 0.5rem">
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap">
               <input
                 type="text"
                 id="searchGlobalId"
                 class="control-input"
+                list="globalIdOptions"
                 placeholder="Enter Global ID"
               />
               <button
@@ -43,7 +44,22 @@
               >
                 Search
               </button>
+              <button
+                id="prevVehicleBtn"
+                class="btn btn-secondary"
+                style="padding: 0.75rem 1rem"
+              >
+                Prev ID
+              </button>
+              <button
+                id="nextVehicleBtn"
+                class="btn btn-secondary"
+                style="padding: 0.75rem 1rem"
+              >
+                Next ID
+              </button>
             </div>
+            <datalist id="globalIdOptions"></datalist>
           </div>
 
           <div class="control-group">
@@ -79,11 +95,60 @@
             class="control-input"
             style="width: 100%"
           />
+          <div id="timelineTicks" class="timeline-ticks"></div>
+        </div>
+
+        <div class="camera-filter-panel">
+          <div class="camera-filter-header">
+            <label class="control-label" style="margin: 0">Camera Filter</label>
+            <div class="camera-filter-actions">
+              <button
+                id="selectAllCamerasBtn"
+                class="btn btn-secondary"
+                style="padding: 0.45rem 0.9rem"
+              >
+                All
+              </button>
+              <button
+                id="clearCameraFiltersBtn"
+                class="btn btn-secondary"
+                style="padding: 0.45rem 0.9rem"
+              >
+                None
+              </button>
+            </div>
+          </div>
+          <div id="cameraFilterGroup" class="camera-filter-group">
+            <label class="camera-filter-chip"
+              ><input type="checkbox" value="c001" checked /> c001</label
+            >
+            <label class="camera-filter-chip"
+              ><input type="checkbox" value="c002" checked /> c002</label
+            >
+            <label class="camera-filter-chip"
+              ><input type="checkbox" value="c003" checked /> c003</label
+            >
+            <label class="camera-filter-chip"
+              ><input type="checkbox" value="c004" checked /> c004</label
+            >
+            <label class="camera-filter-chip"
+              ><input type="checkbox" value="c005" checked /> c005</label
+            >
+          </div>
         </div>
 
         <div style="display: flex; gap: 1rem; margin-top: 1.5rem">
           <button id="playPauseBtn" class="btn btn-primary">Play</button>
           <button id="resetBtn" class="btn btn-secondary">Reset</button>
+          <button id="prevSwitchBtn" class="btn btn-secondary">
+            Prev Switch
+          </button>
+          <button id="nextSwitchBtn" class="btn btn-secondary">
+            Next Switch
+          </button>
+          <div id="currentCameraBadge" class="current-camera-badge">
+            Current camera: -
+          </div>
         </div>
 
         <div
@@ -125,6 +190,18 @@
             </div>
           </div>
         </div>
+
+        <div id="cameraTransitionsPanel" class="camera-transitions-panel">
+          <div class="camera-transitions-header">
+            <span class="camera-transitions-title">Camera Transitions</span>
+            <span id="cameraTransitionsSummary" class="camera-transitions-summary"
+              >Select a Global ID to see confirmed camera switches.</span
+            >
+          </div>
+          <div id="cameraTransitionsList" class="camera-transitions-list">
+            <div class="camera-transitions-empty">No vehicle selected</div>
+          </div>
+        </div>
       </div>
 
       <!-- Visualization Panel -->
@@ -133,6 +210,6 @@
       </div>
     </div>
 
-    <script src="visualization.js"></script>
+    <script src="visualization.js?v=20260217d"></script>
   </body>
 </html>
