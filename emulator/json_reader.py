@@ -54,14 +54,15 @@ def load_detections_from_json(json_path: Path, camera_id: str) -> Optional[Dict[
             for det in track.get('dets', []):
                 timestamp = det['det_timestamp']
 
-                # Extract relevant fields
+                # Extract relevant fields (use same names as original JSON for compatibility)
                 detection = {
                     'track_id': track_id,
-                    'bbox': det['det_bbox'],
-                    'bbox_score': det.get('det_bbox_score', 0.0),
-                    'birdeye': det['det_birdeye'],
-                    'vehicle_class': det.get('det_kp_class_name', 'Unknown'),
-                    'frame': int(det['det_impath'])
+                    'det_bbox': det['det_bbox'],
+                    'det_bbox_score': det.get('det_bbox_score', 0.0),
+                    'det_birdeye': det['det_birdeye'],  # Keep original name for tracking
+                    'det_kp_class_name': det.get('det_kp_class_name', 'Unknown'),  # Keep original name
+                    'det_timestamp': timestamp,  # Add timestamp field
+                    'det_impath': det['det_impath']  # Keep original name
                 }
 
                 detections_by_timestamp[timestamp].append(detection)

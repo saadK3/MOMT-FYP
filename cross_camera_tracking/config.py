@@ -19,7 +19,7 @@ SCORE_THRESHOLD = 0.3            # Minimum IOU score for clustering (same as IOU
 # CAMERA CONFIGURATION
 # ============================================
 CAMERAS = ['c001', 'c002', 'c003', 'c004', 'c005']
-JSON_DIR = 'json'
+JSON_DIR = 'data'
 VIDEO_DIR = 'videos'
 OUTPUT_DIR = 'output'
 

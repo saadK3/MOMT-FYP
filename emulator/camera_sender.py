@@ -152,10 +152,13 @@ class CameraSender:
             if self._current_timestamp > self.end_time:
                 if self.loop_enabled:
                     # Loop back to start
-                    # Recalculate local start time from global start time
-                    # (start_time was already calculated as global_start - offset in app.py)
+                    # IMPORTANT: All cameras must restart at the same GLOBAL time (GLOBAL_START_TIME)
+                    # This means each camera restarts at its original local start time
+                    # which was calculated as: local_start = GLOBAL_START - offset
+                    # This ensures synchronization is maintained across loops
                     logger.info(f"[{self.camera_id}] Reached end @ t={self.end_time:.1f}s, "
-                               f"looping back to local t={self.start_time:.1f}s")
+                               f"looping back to local t={self.start_time:.1f}s "
+                               f"(global t={self.start_time + self.time_offset:.1f}s)")
                     self._current_timestamp = self.start_time
                 else:
                     # Exit loop

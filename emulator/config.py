@@ -4,7 +4,7 @@
 # Camera settings
 # naming is deteministic and scalable (add c006 and json files)
 CAMERAS = ['c001', 'c002', 'c003', 'c004', 'c005']
-JSON_DIR = 'json'
+JSON_DIR = 'data'
 JSON_PATTERN = 'S01_{camera}_tracks_data.json'
 
 # Camera time offsets (in seconds) - for timestamp synchronization
@@ -20,24 +20,24 @@ CAMERA_TIME_OFFSETS = {
 }
 
 # Emulator settings
-FPS = 1  # Slow down to 1 frame per second for better visualization
-TIME_STEP = 1.0  # 1/FPS = 1.0 seconds
+FPS = 10  # Slow down to 1 frame per second for better visualization
+TIME_STEP = 0.1  # 1/FPS = 1.0 seconds
 
 # Time range to emulate (in seconds)
-# GLOBAL_START_TIME is the synchronized global time where all cameras begin
-# Each camera will start at a different LOCAL time: local_start = GLOBAL_START - offset
-GLOBAL_START_TIME = 2.235  # Set to max(CAMERA_TIME_OFFSETS) to avoid negative local times
-END_TIME = 60.0  # Extended to 60 seconds for longer demo
-LOOP_ENABLED = True  # If True, restart from GLOBAL_START_TIME when END_TIME is reached
+# Global clock strategy: use full timeline where all cameras have data
+# Cameras start/stop naturally at their data boundaries
+GLOBAL_START_TIME = 1.6    # Earliest camera start (c002 at local 0.0s + offset 1.6s)
+GLOBAL_END_TIME = 213.1    # Latest camera end (c004/c005 at local 210.9s + offset 2.2s)
+LOOP_ENABLED = True        # Loop continuously for live dashboard
 
 # Network simulation defaults
-BASE_LATENCY_MS = 60
-JITTER_MS = 120
-PACKET_LOSS_PROB = 0.01  # 1% packet loss
+BASE_LATENCY_MS = 0
+JITTER_MS = 0
+PACKET_LOSS_PROB = 0.0  # 1% packet loss
 
 # Hub aggregator settings
-WATERMARK_MS = 200  # Wait up to 200ms for packets
-QUORUM = 3  # Minimum cameras needed for partial decision
+WATERMARK_MS = 200  # Wait up to 200ms for late packets before making decision
+QUORUM = 1          # Minimum cameras required for decision (1 = accept all detections)
 
 # WebSocket server
 WS_HOST = 'localhost'

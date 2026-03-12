@@ -145,7 +145,8 @@ class Hub:
                 sentence_status[camera_id] = {
                     'word': packet['sentence_word'],
                     'arrived': True,
-                    'delay_ms': packet.get('actual_delay_ms', 0)
+                    'delay_ms': packet.get('actual_delay_ms', 0),
+                    'detections': packet.get('detections', [])  # Include detections for tracking
                 }
             else:
                 sentence_status[camera_id] = {

@@ -66,16 +66,23 @@ async def main():
             camera_offset = config.CAMERA_TIME_OFFSETS.get(camera_id, 0.0)
             local_start_time = config.GLOBAL_START_TIME - camera_offset
 
+            # Calculate local end time
+            # Formula: local_end = global_end - offset
+            # With global clock strategy, cameras naturally stop when their data ends
+            local_end_time = config.GLOBAL_END_TIME - camera_offset
+
             logger.info(f"Camera {camera_id}: offset={camera_offset:.3f}s, "
                        f"local_start={local_start_time:.3f}s, "
-                       f"global_start={config.GLOBAL_START_TIME:.3f}s")
+                       f"local_end={local_end_time:.3f}s, "
+                       f"global_start={config.GLOBAL_START_TIME:.3f}s, "
+                       f"global_end={config.GLOBAL_END_TIME:.3f}s")
 
             sender = CameraSender(
                 camera_id=camera_id,
                 fps=config.FPS,
                 detections_by_timestamp=all_camera_data[camera_id],
                 start_time=local_start_time,  # Each camera starts at different local time
-                end_time=config.END_TIME,
+                end_time=local_end_time,  # Each camera ends at different local time (same global time)
                 sentence_word=config.SENTENCE_WORDS.get(camera_id, ''),
                 time_offset=camera_offset,  # Apply time offset for synchronization
                 loop_enabled=config.LOOP_ENABLED  # Enable infinite looping
@@ -134,8 +141,14 @@ async def main():
     logger.info(f"All {len(tasks)} tasks created")
     logger.info("="*70)
     logger.info(f"WebSocket server: ws://{config.WS_HOST}:{config.WS_PORT}")
-    logger.info(f"Emulating time range: global {config.GLOBAL_START_TIME}s - {config.END_TIME}s")
+    logger.info(f"Emulating time range: global {config.GLOBAL_START_TIME}s - {config.GLOBAL_END_TIME}s")
     logger.info("Press Ctrl+C to stop")
+    logger.info("="*70)
+
+    # Wait for clients to connect before starting data transmission
+    logger.info("⏳ Waiting 2 seconds for clients to connect...")
+    await asyncio.sleep(2)
+    logger.info("🚀 Starting data transmission...")
     logger.info("="*70)
 
     # Run all tasks

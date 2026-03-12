@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MOMT — Real-Time Cross-Camera Tracking</title>
+    <meta
+      name="description"
+      content="Real-time multi-camera vehicle tracking dashboard with ground plane visualization"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
+  </head>
+  <body>
+    <!-- Navigation -->
+    <nav class="navbar" id="navbar">
+      <div class="nav-brand">
+        <span class="brand-icon">◈</span>
+        <span class="brand-text">MOMT</span>
+        <span class="brand-sub">Multi-Object Multi-Camera Tracking</span>
+      </div>
+      <div class="nav-status">
+        <span class="connection-dot" id="connectionDot"></span>
+        <span class="connection-text" id="connectionText">Connecting…</span>
+      </div>
+    </nav>
+
+    <!-- Main Dashboard -->
+    <main class="dashboard">
+      <!-- Left Sidebar — Stats -->
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-section">
+          <h3 class="section-title">Live Statistics</h3>
+          <div class="stat-grid">
+            <div class="stat-card" id="statVehicles">
+              <div class="stat-value">0</div>
+              <div class="stat-label">Active Vehicles</div>
+            </div>
+            <div class="stat-card" id="statGlobalIds">
+              <div class="stat-value">0</div>
+              <div class="stat-label">Total Global IDs</div>
+            </div>
+            <div class="stat-card" id="statTimestamp">
+              <div class="stat-value">0.0s</div>
+              <div class="stat-label">Current Time</div>
+            </div>
+            <div class="stat-card" id="statUptime">
+              <div class="stat-value">0s</div>
+              <div class="stat-label">Uptime</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <h3 class="section-title">Cameras</h3>
+          <div class="camera-grid" id="cameraGrid">
+            <div class="camera-card" data-camera="c001">
+              <span class="camera-dot"></span>
+              <span class="camera-name">C001</span>
+              <span class="camera-status">—</span>
+            </div>
+            <div class="camera-card" data-camera="c002">
+              <span class="camera-dot"></span>
+              <span class="camera-name">C002</span>
+              <span class="camera-status">—</span>
+            </div>
+            <div class="camera-card" data-camera="c003">
+              <span class="camera-dot"></span>
+              <span class="camera-name">C003</span>
+              <span class="camera-status">—</span>
+            </div>
+            <div class="camera-card" data-camera="c004">
+              <span class="camera-dot"></span>
+              <span class="camera-name">C004</span>
+              <span class="camera-status">—</span>
+            </div>
+            <div class="camera-card" data-camera="c005">
+              <span class="camera-dot"></span>
+              <span class="camera-name">C005</span>
+              <span class="camera-status">—</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="sidebar-section">
+          <h3 class="section-title">Vehicle List</h3>
+          <div class="vehicle-list" id="vehicleList">
+            <div class="vehicle-list-empty">Waiting for data…</div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Main Visualization -->
+      <section class="main-view">
+        <div class="viz-header">
+          <h2 class="viz-title" id="vizTitle">Ground Plane — Real-Time</h2>
+          <div class="viz-controls">
+            <label class="toggle-label">
+              <input type="checkbox" id="trailToggle" checked />
+              <span class="toggle-text">Trails</span>
+            </label>
+            <label class="toggle-label">
+              <input type="checkbox" id="labelsToggle" checked />
+              <span class="toggle-text">Labels</span>
+            </label>
+          </div>
+        </div>
+        <div id="groundPlane" class="ground-plane-container"></div>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
