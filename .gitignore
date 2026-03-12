@@ -39,7 +39,7 @@ venv.bak/
 .DS_Store
 
 # Project-specific directories (auto-generated)
-json/
+data/
 output/
 videos/
 
