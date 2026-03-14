@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MOMT — 3D Tracking View</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <!-- 3D Canvas (full screen) -->
+    <canvas id="scene"></canvas>
+
+    <!-- HUD Overlay -->
+    <div id="hud">
+      <div class="hud-top-left">
+        <span class="hud-brand">◈ MOMT 3D</span>
+        <span class="hud-dot" id="connectionDot"></span>
+        <span class="hud-connection" id="connectionText">Connecting…</span>
+      </div>
+      <div class="hud-top-right">
+        <div class="hud-stat">
+          <span class="hud-stat-value" id="vehicleCount">0</span>
+          <span class="hud-stat-label">vehicles</span>
+        </div>
+        <div class="hud-stat">
+          <span class="hud-stat-value" id="globalIdCount">0</span>
+          <span class="hud-stat-label">global IDs</span>
+        </div>
+        <div class="hud-stat">
+          <span class="hud-stat-value" id="currentTime">0.0s</span>
+          <span class="hud-stat-label">time</span>
+        </div>
+      </div>
+      <div class="hud-bottom">
+        <span class="hud-hint"
+          >Drag to orbit · Scroll to zoom · Right-drag to pan</span
+        >
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

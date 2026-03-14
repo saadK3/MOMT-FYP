@@ -43,6 +43,7 @@ FYP-final/
 ### Prerequisites
 
 - Python 3.7 or higher
+- Node.js (v16+ recommended for Vite frontend)
 - Git
 
 ### Installation
@@ -71,10 +72,20 @@ FYP-final/
      source venv/bin/activate
      ```
 
-4. **Install dependencies**
+4. **Install backend dependencies**
 
    ```bash
    pip install -r requirements.txt
+   ```
+
+5. **Install frontend dependencies**
+
+   ```bash
+   cd dashboard
+   npm install
+   cd ../3d-view
+   npm install
+   cd ..
    ```
 
 5. **Prepare data directories**
@@ -90,6 +101,16 @@ FYP-final/
    - `output/`: Will be auto-generated during tracking
 
 ## Usage
+
+### Quick Start (Full System)
+
+Run both the backend tracking server and the frontend dashboard simultaneously:
+
+```bash
+python run_system.py
+```
+
+This starts the backend (ws://localhost:8765), Vite dashboard (http://localhost:3000), and automatically opens your browser. Use `Ctrl+C` to cleanly shut down both servers.
 
 ### Running the Cross-Camera Tracking
 
