@@ -17,40 +17,55 @@ export class VehicleManager {
    */
   update(msg) {
     const timestamp = msg.timestamp;
-    const seenIds = new Set();
+    const grouped = new Map();
 
-    for (const v of msg.vehicles) {
-      const gid = v.global_id;
-      seenIds.add(gid);
+    for (const vehicle of msg.vehicles) {
+      const gid = vehicle.global_id;
+      if (!grouped.has(gid)) grouped.set(gid, []);
+      grouped.get(gid).push(vehicle);
+    }
+
+    for (const [gid, group] of grouped.entries()) {
+      const primary = group[group.length - 1];
+      const cameraState =
+        primary.camera_state ||
+        [...new Set(group.map((vehicle) => vehicle.camera))].sort();
+      const cameraStateLabel =
+        primary.camera_state_label ||
+        cameraState.map((camera) => camera.toUpperCase()).join(" + ");
 
       if (!this.vehicles.has(gid)) {
-        // New vehicle
         this.vehicles.set(gid, {
           global_id: gid,
-          camera: v.camera,
-          track_id: v.track_id,
-          class: v.class,
-          color: v.color,
-          footprint: v.footprint,
-          centroid: v.centroid,
-          trail: [v.centroid],
+          camera: primary.camera,
+          cameraState,
+          cameraStateLabel,
+          track_id: primary.track_id,
+          class: primary.class,
+          color: primary.color,
+          footprint: primary.footprint,
+          centroid: primary.centroid,
+          hasCameraChanged: Boolean(primary.has_camera_changed),
+          trail: [primary.centroid],
           lastSeen: timestamp,
         });
-      } else {
-        // Update existing
-        const state = this.vehicles.get(gid);
-        state.camera = v.camera;
-        state.track_id = v.track_id;
-        state.footprint = v.footprint;
-        state.centroid = v.centroid;
-        state.color = v.color;
-        state.lastSeen = timestamp;
+        continue;
+      }
 
-        // Append to trail (keep bounded)
-        state.trail.push(v.centroid);
-        if (state.trail.length > TRAIL_LENGTH) {
-          state.trail.shift();
-        }
+      const state = this.vehicles.get(gid);
+      state.camera = primary.camera;
+      state.cameraState = cameraState;
+      state.cameraStateLabel = cameraStateLabel;
+      state.track_id = primary.track_id;
+      state.footprint = primary.footprint;
+      state.centroid = primary.centroid;
+      state.color = primary.color;
+      state.hasCameraChanged = Boolean(primary.has_camera_changed);
+      state.lastSeen = timestamp;
+
+      state.trail.push(primary.centroid);
+      if (state.trail.length > TRAIL_LENGTH) {
+        state.trail.shift();
       }
     }
 
@@ -65,6 +80,11 @@ export class VehicleManager {
   /** Get array of active vehicle states. */
   getActive() {
     return Array.from(this.vehicles.values());
+  }
+
+  /** Get one active vehicle state by global ID. */
+  getByGlobalId(globalId) {
+    return this.vehicles.get(globalId) || null;
   }
 
   /** Get count of active vehicles. */
