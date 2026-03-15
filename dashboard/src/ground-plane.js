@@ -1,10 +1,8 @@
 /**
- * Ground Plane — renders vehicles on a Plotly scatter plot
- * with the mosaic background image.
+ * Ground Plane renders active vehicles on the shared mosaic map.
  */
 
-// Mosaic image bounds (EPSG:3857 / Web Mercator, metres)
-const MOSAIC_BOUNDS = {
+export const MOSAIC_BOUNDS = {
   xmin: 4252523.5462492965,
   xmax: 4252623.142834548,
   ymin: -9072438.675959857,
@@ -17,10 +15,10 @@ let showLabels = true;
 
 /**
  * Initialize Plotly with an empty plot + mosaic background.
- * @param {string} containerId  DOM element id
+ * @param {string} containerId
  */
 export function initPlot(containerId) {
-  const layout = buildLayout("Ground Plane — Waiting for data…");
+  const layout = createBaseLayout("Ground Plane - Waiting for data...");
   const config = { responsive: true, displayModeBar: false };
   Plotly.newPlot(containerId, [], layout, config);
   plotInitialized = true;
@@ -32,6 +30,7 @@ export function initPlot(containerId) {
 export function setTrails(enabled) {
   showTrails = enabled;
 }
+
 export function setLabels(enabled) {
   showLabels = enabled;
 }
@@ -40,7 +39,7 @@ export function setLabels(enabled) {
  * Render current vehicle state on the ground plane.
  * @param {string} containerId
  * @param {import("./vehicle-manager").VehicleManager} vehicleManager
- * @param {number} timestamp  current simulation time
+ * @param {number} timestamp
  */
 export function render(containerId, vehicleManager, timestamp) {
   if (!plotInitialized) return;
@@ -48,16 +47,13 @@ export function render(containerId, vehicleManager, timestamp) {
   const vehicles = vehicleManager.getActive();
   const traces = [];
 
-  // --- Trail traces (rendered first so they appear below) --------
   if (showTrails) {
-    for (const v of vehicles) {
-      if (v.trail.length < 2) continue;
-      const trailX = v.trail.map((c) => c[0]);
-      const trailY = v.trail.map((c) => c[1]);
-
-      // Fading opacity: old positions more transparent
-      const n = trailX.length;
-      const opacities = trailX.map((_, i) => 0.15 + 0.6 * (i / (n - 1)));
+    for (const vehicle of vehicles) {
+      if (vehicle.trail.length < 2) continue;
+      const trailX = vehicle.trail.map((centroid) => centroid[0]);
+      const trailY = vehicle.trail.map((centroid) => centroid[1]);
+      const count = trailX.length;
+      const opacities = trailX.map((_, index) => 0.15 + 0.6 * (index / (count - 1)));
 
       traces.push({
         x: trailX,
@@ -66,7 +62,9 @@ export function render(containerId, vehicleManager, timestamp) {
         line: { color: "rgba(255,255,255,0.18)", width: 2, dash: "dot" },
         marker: {
           size: 4,
-          color: opacities.map((o) => v.color.replace(/[\d.]+\)$/, `${o})`)),
+          color: opacities.map((opacity) =>
+            vehicle.color.replace(/[\d.]+\)$/, `${opacity})`),
+          ),
           line: { color: "rgba(255,255,255,0.15)", width: 0.5 },
         },
         showlegend: false,
@@ -75,56 +73,81 @@ export function render(containerId, vehicleManager, timestamp) {
     }
   }
 
-  // --- Vehicle footprint traces ----------------------------------
-  for (const v of vehicles) {
-    const fp = v.footprint;
-    if (!fp || fp.length !== 8) continue;
+  for (const vehicle of vehicles) {
+    const footprint = vehicle.footprint;
+    if (!footprint || footprint.length !== 8) continue;
 
-    const x = [fp[0], fp[2], fp[4], fp[6], fp[0]];
-    const y = [fp[1], fp[3], fp[5], fp[7], fp[1]];
+    const x = [
+      footprint[0],
+      footprint[2],
+      footprint[4],
+      footprint[6],
+      footprint[0],
+    ];
+    const y = [
+      footprint[1],
+      footprint[3],
+      footprint[5],
+      footprint[7],
+      footprint[1],
+    ];
 
     traces.push({
       x,
       y,
       mode: showLabels ? "lines+text" : "lines",
       fill: "toself",
-      fillcolor: v.color,
-      line: { color: v.color, width: 2 },
+      fillcolor: vehicle.color,
+      line: { color: vehicle.color, width: 2 },
       opacity: 0.85,
-      text: showLabels ? [`G${v.global_id}`] : undefined,
+      text: showLabels ? [`G${vehicle.global_id}`] : undefined,
       textposition: "middle center",
       textfont: {
         size: 11,
         color: "white",
         family: "Inter, Arial Black, sans-serif",
       },
-      name: `GID ${v.global_id}`,
-      customdata: [[v.global_id, v.camera, v.track_id, v.class]],
+      name: `GID ${vehicle.global_id}`,
+      customdata: [[
+        vehicle.global_id,
+        vehicle.cameraStateLabel || vehicle.camera.toUpperCase(),
+        vehicle.track_id,
+        vehicle.class,
+        vehicle.hasCameraChanged ? "Yes" : "No",
+      ]],
       hovertemplate:
-        `<b>Global ID ${v.global_id}</b><br>` +
-        `Camera: ${v.camera}<br>` +
-        `Track: ${v.track_id}<br>` +
-        `Class: ${v.class}` +
+        `<b>Global ID ${vehicle.global_id}</b><br>` +
+        `Camera State: %{customdata[1]}<br>` +
+        `Track: ${vehicle.track_id}<br>` +
+        `Class: ${vehicle.class}<br>` +
+        `Camera Changed: %{customdata[4]}` +
         `<extra></extra>`,
+      showlegend: false,
     });
   }
 
-  // --- Update title ---
   const title =
     vehicles.length > 0
-      ? `Ground Plane — ${vehicles.length} vehicles @ t=${timestamp.toFixed(1)}s`
-      : `Ground Plane — Waiting for data…`;
+      ? `Ground Plane - ${vehicles.length} vehicles @ t=${timestamp.toFixed(1)}s`
+      : "Ground Plane - Waiting for data...";
 
-  const layout = buildLayout(title);
+  const layout = createBaseLayout(title);
   const config = { responsive: true, displayModeBar: false };
-
   Plotly.react(containerId, traces, layout, config);
 }
 
-/* ---- helpers ---- */
+/**
+ * Shared base layout used by both live map and journey view.
+ * @param {string} titleText
+ * @param {object} options
+ * @returns {object}
+ */
+export function createBaseLayout(titleText, options = {}) {
+  const xRange = options.xRange || [MOSAIC_BOUNDS.xmin, MOSAIC_BOUNDS.xmax];
+  const yRange = options.yRange || [MOSAIC_BOUNDS.ymin, MOSAIC_BOUNDS.ymax];
+  const showLegend = Boolean(options.showLegend);
 
-function buildLayout(titleText) {
-  return {
+  const layout = {
     title: {
       text: titleText,
       font: { size: 16, color: "#8899b3", family: "Inter, sans-serif" },
@@ -136,7 +159,7 @@ function buildLayout(titleText) {
       gridcolor: "rgba(255,255,255,0.04)",
       zerolinecolor: "rgba(255,255,255,0.04)",
       color: "#5a6d87",
-      range: [MOSAIC_BOUNDS.xmin, MOSAIC_BOUNDS.xmax],
+      range: xRange,
       constrain: "range",
       showticklabels: false,
     },
@@ -145,7 +168,7 @@ function buildLayout(titleText) {
       gridcolor: "rgba(255,255,255,0.04)",
       zerolinecolor: "rgba(255,255,255,0.04)",
       color: "#5a6d87",
-      range: [MOSAIC_BOUNDS.ymin, MOSAIC_BOUNDS.ymax],
+      range: yRange,
       constrain: "range",
       scaleanchor: "x",
       showticklabels: false,
@@ -166,11 +189,28 @@ function buildLayout(titleText) {
         opacity: 0.8,
       },
     ],
+    annotations: options.annotations || [],
     hovermode: "closest",
-    showlegend: false,
+    showlegend: showLegend,
     plot_bgcolor: "rgba(0,0,0,0)",
     paper_bgcolor: "#060d18",
     font: { color: "#e8edf5" },
-    margin: { l: 10, r: 10, t: 40, b: 10 },
+    margin: options.margin || { l: 10, r: 10, t: 40, b: 10 },
   };
+
+  if (showLegend) {
+    layout.legend = {
+      orientation: "h",
+      x: 0.01,
+      y: 1.02,
+      xanchor: "left",
+      yanchor: "bottom",
+      bgcolor: "rgba(6,13,24,0.78)",
+      bordercolor: "rgba(255,255,255,0.08)",
+      borderwidth: 1,
+      font: { size: 11, color: "#c8d3e3", family: "Inter, sans-serif" },
+    };
+  }
+
+  return layout;
 }

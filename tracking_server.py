@@ -16,6 +16,7 @@ import sys
 import time
 from pathlib import Path
 from typing import Dict, Set
+from collections import defaultdict
 
 import websockets
 
@@ -32,6 +33,7 @@ from cross_camera_tracking.tracker import CrossCameraTracker
 from cross_camera_tracking.matching import build_score_matrix
 from cross_camera_tracking.clustering import agglomerative_clustering
 from cross_camera_tracking.geometry import compute_centroid
+from cross_camera_tracking.journey_archive import JourneyArchive
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +62,9 @@ class TrackerService:
         self.processed_timestamps: set = set()
         self.total_decisions = 0
         self.total_detections = 0
+        self.camera_journeys: Dict[int, Dict] = {}
+        self.recent_camera_events = []
+        self.max_recent_camera_events = 50
 
     # --- detection extraction (same logic as EmulatorClient) ---------------
     @staticmethod
@@ -82,6 +87,137 @@ class TrackerService:
                     "frame": int(det.get("det_impath", 0)),
                 })
         return detections
+
+    @staticmethod
+    def _normalize_camera_state(cameras) -> list:
+        """Return a stable, deduplicated camera-state list."""
+        return sorted(set(cameras))
+
+    @staticmethod
+    def _camera_state_label(camera_state: list) -> str:
+        """Human-friendly label for one or more active cameras."""
+        if not camera_state:
+            return "Unknown"
+        return " + ".join(camera.upper() for camera in camera_state)
+
+    def _serialize_camera_journey(self, global_id: int) -> Dict:
+        """Convert an internal journey record into a JSON-safe payload."""
+        record = self.camera_journeys[global_id]
+        return {
+            "global_id": global_id,
+            "current_camera_state": record["current_camera_state"],
+            "current_camera_label": self._camera_state_label(
+                record["current_camera_state"]
+            ),
+            "previous_camera_state": record["previous_camera_state"],
+            "previous_camera_label": (
+                self._camera_state_label(record["previous_camera_state"])
+                if record["previous_camera_state"]
+                else None
+            ),
+            "unique_cameras": record["unique_cameras"],
+            "transition_count": record["transition_count"],
+            "has_camera_changed": record["has_camera_changed"],
+            "last_seen_at": round(record["last_seen_at"], 2),
+            "journey": [
+                {
+                    "camera_state": segment["camera_state"],
+                    "camera_label": self._camera_state_label(
+                        segment["camera_state"]
+                    ),
+                    "entered_at": round(segment["entered_at"], 2),
+                    "last_seen_at": round(segment["last_seen_at"], 2),
+                }
+                for segment in record["journey"]
+            ],
+            "last_transition": record["last_transition"],
+        }
+
+    def build_camera_journey_snapshot(self) -> Dict:
+        """Build a complete snapshot for newly connected dashboard clients."""
+        return {
+            "type": "camera_journey_snapshot",
+            "journeys": {
+                str(global_id): self._serialize_camera_journey(global_id)
+                for global_id in sorted(self.camera_journeys)
+            },
+            "recent_events": self.recent_camera_events,
+        }
+
+    def _record_camera_journey(
+        self, global_id: int, camera_state: list, timestamp: float
+    ):
+        """
+        Update a global ID's camera journey.
+
+        Returns:
+            tuple[bool, dict | None]:
+                bool -> whether the serialized journey should be sent to clients
+                dict -> camera-change event payload if a transition happened
+        """
+        record = self.camera_journeys.get(global_id)
+
+        if record is None:
+            self.camera_journeys[global_id] = {
+                "current_camera_state": camera_state,
+                "previous_camera_state": None,
+                "unique_cameras": camera_state[:],
+                "transition_count": 0,
+                "has_camera_changed": False,
+                "last_seen_at": timestamp,
+                "journey": [
+                    {
+                        "camera_state": camera_state,
+                        "entered_at": timestamp,
+                        "last_seen_at": timestamp,
+                    }
+                ],
+                "last_transition": None,
+            }
+            return True, None
+
+        record["last_seen_at"] = timestamp
+        current_segment = record["journey"][-1]
+
+        if current_segment["camera_state"] == camera_state:
+            current_segment["last_seen_at"] = timestamp
+            record["current_camera_state"] = camera_state
+            return False, None
+
+        previous_state = record["current_camera_state"]
+        record["previous_camera_state"] = previous_state
+        record["current_camera_state"] = camera_state
+        record["transition_count"] += 1
+        record["has_camera_changed"] = True
+        record["unique_cameras"] = sorted(
+            set(record["unique_cameras"]) | set(camera_state)
+        )
+        record["journey"].append({
+            "camera_state": camera_state,
+            "entered_at": timestamp,
+            "last_seen_at": timestamp,
+        })
+
+        transition_event = {
+            "event_id": (
+                f"{global_id}:{timestamp:.2f}:"
+                f"{'-'.join(previous_state)}>{'-'.join(camera_state)}"
+            ),
+            "global_id": global_id,
+            "timestamp": round(timestamp, 2),
+            "from_camera_state": previous_state,
+            "from_camera_label": self._camera_state_label(previous_state),
+            "to_camera_state": camera_state,
+            "to_camera_label": self._camera_state_label(camera_state),
+            "transition_index": record["transition_count"],
+        }
+        record["last_transition"] = transition_event
+        self.recent_camera_events.append(transition_event)
+        self.recent_camera_events = self.recent_camera_events[
+            -self.max_recent_camera_events:
+        ]
+
+        return True, transition_event
 
     # --- main processing loop ---------------------------------------------
     async def run(self, decision_queue: asyncio.Queue,
@@ -117,6 +253,8 @@ class TrackerService:
                 # --- Run tracking algorithm --------------------------------
                 vehicles = []
                 num_clusters = 0
+                journey_updates = {}
+                camera_change_events = []
 
                 if detections:
                     score_matrix = build_score_matrix(detections)
@@ -126,33 +264,66 @@ class TrackerService:
                         clusters, detections, timestamp
                     )
 
-                    # Build vehicle list for the frontend
+                    detections_by_global_id = defaultdict(list)
                     for det in detections:
                         key = (det["camera"], det["track_id"])
                         gid = self.tracker.global_id_map.get(key)
-                        if gid is None:
-                            continue
-                        footprint = det["footprint"]
-                        centroid = (
-                            compute_centroid(footprint)
-                            if len(footprint) == 8
-                            else (0, 0)
+                        if gid is not None:
+                            detections_by_global_id[gid].append(det)
+
+                    for gid, group in detections_by_global_id.items():
+                        camera_state = self._normalize_camera_state(
+                            det["camera"] for det in group
                         )
-                        vehicles.append({
-                            "global_id": gid,
-                            "camera": det["camera"],
-                            "track_id": det["track_id"],
-                            "class": det["class"],
-                            "footprint": footprint,
-                            "centroid": list(centroid),
-                            "color": id_to_color(gid),
-                        })
+                        journey_changed, transition_event = (
+                            self._record_camera_journey(
+                                gid, camera_state, timestamp
+                            )
+                        )
+                        if journey_changed:
+                            journey_updates[str(gid)] = (
+                                self._serialize_camera_journey(gid)
+                            )
+                        if transition_event is not None:
+                            camera_change_events.append(transition_event)
+
+                    # Build vehicle list for the frontend
+                    for gid, group in detections_by_global_id.items():
+                        journey_info = self._serialize_camera_journey(gid)
+                        for det in group:
+                            footprint = det["footprint"]
+                            centroid = (
+                                compute_centroid(footprint)
+                                if len(footprint) == 8
+                                else (0, 0)
+                            )
+                            vehicles.append({
+                                "global_id": gid,
+                                "camera": det["camera"],
+                                "track_id": det["track_id"],
+                                "class": det["class"],
+                                "footprint": footprint,
+                                "centroid": list(centroid),
+                                "color": id_to_color(gid),
+                                "camera_state": journey_info["current_camera_state"],
+                                "camera_state_label": (
+                                    journey_info["current_camera_label"]
+                                ),
+                                "has_camera_changed": (
+                                    journey_info["has_camera_changed"]
+                                ),
+                            })
+
+                else:
+                    assignments = {}
 
                 # --- Build tracking_update message -------------------------
                 tracking_update = {
                     "type": "tracking_update",
                     "timestamp": round(timestamp, 2),
                     "vehicles": vehicles,
+                    "journey_updates": journey_updates,
+                    "camera_change_events": camera_change_events,
                     "stats": {
                         "num_detections": len(detections),
                         "num_clusters": num_clusters,
@@ -191,10 +362,18 @@ class DashboardWebSocketServer:
     connected browser clients.  Also handles ping/pong for keep-alive.
     """
 
-    def __init__(self, host: str = "localhost", port: int = 8765):
+    def __init__(
+        self,
+        host: str = "localhost",
+        port: int = 8765,
+        tracker_service: TrackerService = None,
+        journey_archive: JourneyArchive = None,
+    ):
         self.host = host
         self.port = port
         self.clients: Set[websockets.WebSocketServerProtocol] = set()
+        self.tracker_service = tracker_service
+        self.journey_archive = journey_archive
 
     async def _register(self, ws):
         self.clients.add(ws)
@@ -206,6 +385,17 @@ class DashboardWebSocketServer:
             "type": "connection_ack",
             "message": "Connected to tracking server",
         }))
+        if self.journey_archive is not None:
+            recent_events = []
+            if self.tracker_service is not None:
+                recent_events = self.tracker_service.recent_camera_events
+            await ws.send(json.dumps(
+                self.journey_archive.build_snapshot(recent_events)
+            ))
+        elif self.tracker_service is not None:
+            await ws.send(json.dumps(
+                self.tracker_service.build_camera_journey_snapshot()
+            ))
 
     async def _unregister(self, ws):
         self.clients.discard(ws)
@@ -221,6 +411,27 @@ class DashboardWebSocketServer:
                 data = json.loads(message)
                 if data.get("type") == "ping":
                     await ws.send(json.dumps({"type": "pong"}))
+                elif data.get("type") == "journey_view_request":
+                    global_id = data.get("global_id")
+                    try:
+                        global_id = int(global_id)
+                    except (TypeError, ValueError):
+                        global_id = None
+
+                    journey = None
+                    if global_id is not None and self.journey_archive is not None:
+                        journey = self.journey_archive.get_journey(global_id)
+
+                    await ws.send(json.dumps({
+                        "type": "journey_view_data",
+                        "global_id": global_id,
+                        "journey": journey,
+                        "error": (
+                            None
+                            if journey is not None
+                            else f"Journey not found for Global ID {global_id}"
+                        ),
+                    }))
         except websockets.exceptions.ConnectionClosed:
             pass
         finally:
@@ -309,6 +520,18 @@ async def main():
         logger.error("Failed to load camera data. Exiting.")
         return
 
+    logger.info("Building full Global ID journey archive...")
+    journey_archive = JourneyArchive()
+    journey_archive.build(
+        all_camera_data=all_camera_data,
+        camera_offsets=emulator_config.CAMERA_TIME_OFFSETS,
+        start_time=emulator_config.GLOBAL_START_TIME,
+        end_time=emulator_config.GLOBAL_END_TIME,
+        time_step=emulator_config.TIME_STEP,
+        color_fn=id_to_color,
+        logger=logger,
+    )
+
     # --- Internal asyncio queues (the pipeline) ----------------------------
     sender_to_network_q = asyncio.Queue()
     network_to_hub_q = asyncio.Queue()
@@ -356,6 +579,8 @@ async def main():
     ws_server = DashboardWebSocketServer(
         host=emulator_config.WS_HOST,
         port=emulator_config.WS_PORT,
+        tracker_service=tracker_service,
+        journey_archive=journey_archive,
     )
 
     # --- Build task list ---------------------------------------------------

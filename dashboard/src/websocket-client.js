@@ -37,6 +37,21 @@ export class WebSocketClient {
   }
 
   /**
+   * Send a JSON message if the socket is open.
+   * @param {object} payload
+   * @returns {boolean}
+   */
+  send(payload) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.warn("[WS] Cannot send, socket is not open");
+      return false;
+    }
+
+    this.ws.send(JSON.stringify(payload));
+    return true;
+  }
+
+  /**
    * Subscribe to a message type.
    * @param {"tracking_update"|"system_status"|"connection_ack"|"open"|"close"} event
    * @param {Function} callback
