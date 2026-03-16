@@ -150,6 +150,43 @@ function bindControls() {
     renderMainView();
     syncJourneyViewButton();
   });
+
+  const resizer = document.getElementById("sidebarResizer");
+  const sidebar = document.getElementById("sidebar");
+
+  if (resizer && sidebar) {
+    let isResizing = false;
+
+    resizer.addEventListener("mousedown", (e) => {
+      isResizing = true;
+      document.body.style.cursor = "col-resize";
+      resizer.classList.add("is-resizing");
+      e.preventDefault();
+    });
+
+    document.addEventListener("mousemove", (e) => {
+      if (!isResizing) return;
+      const newWidth = e.clientX;
+      sidebar.style.width = `${newWidth}px`;
+      
+      // Force plot resize during drag for a smooth effect
+      if (document.getElementById(PLOT_CONTAINER)) {
+        Plotly.Plots.resize(PLOT_CONTAINER);
+      }
+    });
+
+    document.addEventListener("mouseup", () => {
+      if (isResizing) {
+        isResizing = false;
+        document.body.style.cursor = "";
+        resizer.classList.remove("is-resizing");
+        // One final resize to ensure it snapped correctly
+        if (document.getElementById(PLOT_CONTAINER)) {
+          Plotly.Plots.resize(PLOT_CONTAINER);
+        }
+      }
+    });
+  }
 }
 
 function bindSearch() {

@@ -170,7 +170,6 @@ export function createBaseLayout(titleText, options = {}) {
       color: "#5a6d87",
       range: yRange,
       constrain: "range",
-      scaleanchor: "x",
       showticklabels: false,
     },
     images: [
@@ -193,7 +192,7 @@ export function createBaseLayout(titleText, options = {}) {
     hovermode: "closest",
     showlegend: showLegend,
     plot_bgcolor: "rgba(0,0,0,0)",
-    paper_bgcolor: "#060d18",
+    paper_bgcolor: "#050505",
     font: { color: "#e8edf5" },
     margin: options.margin || { l: 10, r: 10, t: 40, b: 10 },
   };

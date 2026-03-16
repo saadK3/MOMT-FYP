@@ -5,21 +5,21 @@
 /* --- CSS Custom Properties (Design Tokens) --- */
 :root {
   /* Background layers */
-  --bg-base: #060d18;
-  --bg-surface: #0c1a2e;
-  --bg-elevated: #122240;
-  --bg-card: rgba(18, 34, 64, 0.7);
-  --bg-card-hover: rgba(24, 44, 80, 0.85);
+  --bg-base: #050505;
+  --bg-surface: #0a0a0a;
+  --bg-elevated: #121212;
+  --bg-card: rgba(18, 18, 18, 0.7);
+  --bg-card-hover: rgba(24, 24, 24, 0.85);
 
   /* Text */
-  --text-primary: #e8edf5;
-  --text-secondary: #8899b3;
-  --text-muted: #5a6d87;
+  --text-primary: #f5f5f5;
+  --text-secondary: #a3a3a3;
+  --text-muted: #737373;
 
   /* Accent */
-  --accent: #3b82f6;
-  --accent-glow: rgba(59, 130, 246, 0.25);
-  --accent-soft: rgba(59, 130, 246, 0.12);
+  --accent: #f97316; /* Premium Orange */
+  --accent-glow: rgba(249, 115, 22, 0.25);
+  --accent-soft: rgba(249, 115, 22, 0.12);
 
   /* Status */
   --green: #22c55e;
@@ -53,11 +53,18 @@
 html,
 body {
   height: 100%;
-  font-family: var(--font);
+  font-family: var(--mono);
   background: var(--bg-base);
   color: var(--text-primary);
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, h5, h6,
+.brand-text,
+.section-title,
+.viz-title {
+  font-family: var(--font);
 }
 
 /* --- Navbar --- */
@@ -88,8 +95,9 @@ body {
   font-size: 18px;
   font-weight: 700;
   letter-spacing: 1.5px;
-  background: linear-gradient(135deg, var(--accent), #818cf8);
+  background: linear-gradient(135deg, var(--accent), #fcd34d);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
@@ -149,6 +157,8 @@ body {
 /* --- Sidebar --- */
 .sidebar {
   width: var(--sidebar-w);
+  min-width: 260px;
+  max-width: 500px;
   background: var(--bg-surface);
   border-right: 1px solid rgba(255, 255, 255, 0.06);
   padding: var(--gap);
@@ -184,6 +194,21 @@ body {
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 
+/* --- Resizer Handle --- */
+.resizer {
+  width: 5px;
+  background: transparent;
+  cursor: col-resize;
+  flex-shrink: 0;
+  transition: background 0.2s;
+  z-index: 10;
+}
+
+.resizer:hover,
+.resizer.is-resizing {
+  background: rgba(249, 115, 22, 0.5); /* Premium Orange indicator */
+}
+
 /* --- Stat Cards --- */
 .stat-grid {
   display: grid;
@@ -192,8 +217,8 @@ body {
 }
 
 .stat-card {
-  background: var(--bg-card);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius-sm);
   padding: 12px 10px;
   text-align: center;
@@ -203,8 +228,8 @@ body {
 }
 
 .stat-card:hover {
-  background: var(--bg-card-hover);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.15);
 }
 
 .stat-value {
@@ -235,15 +260,15 @@ body {
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
-  background: var(--bg-card);
-  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius-sm);
   transition: all 0.2s;
 }
 
 .camera-card.active {
-  border-color: rgba(34, 197, 94, 0.3);
-  background: rgba(34, 197, 94, 0.06);
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .camera-dot {
@@ -320,8 +345,8 @@ body {
 }
 
 .vehicle-item.selected {
-  background: rgba(59, 130, 246, 0.1);
-  border-color: rgba(59, 130, 246, 0.35);
+  background: var(--accent-soft);
+  border-color: rgba(249, 115, 22, 0.35);
 }
 
 .vehicle-color-dot {
@@ -363,14 +388,14 @@ body {
 
 .search-input:focus {
   outline: none;
-  border-color: rgba(59, 130, 246, 0.5);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+  border-color: rgba(249, 115, 22, 0.5);
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.12);
 }
 
 .search-btn {
-  border: 1px solid rgba(59, 130, 246, 0.4);
+  border: 1px solid rgba(249, 115, 22, 0.4);
   border-radius: var(--radius-sm);
-  background: rgba(59, 130, 246, 0.14);
+  background: rgba(249, 115, 22, 0.14);
   color: var(--text-primary);
   padding: 0 12px;
   font-size: 11px;
@@ -383,8 +408,8 @@ body {
 }
 
 .search-btn:hover {
-  background: rgba(59, 130, 246, 0.2);
-  border-color: rgba(59, 130, 246, 0.55);
+  background: rgba(249, 115, 22, 0.2);
+  border-color: rgba(249, 115, 22, 0.55);
 }
 
 .search-hint {
@@ -397,8 +422,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  background: var(--bg-card);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius-sm);
   padding: 12px;
 }
@@ -487,9 +512,9 @@ body {
 
 .journey-view-btn {
   width: 100%;
-  border: 1px solid rgba(34, 197, 94, 0.35);
+  border: 1px solid rgba(249, 115, 22, 0.35);
   border-radius: var(--radius-sm);
-  background: rgba(34, 197, 94, 0.12);
+  background: rgba(249, 115, 22, 0.12);
   color: var(--text-primary);
   padding: 10px 12px;
   font-size: 11px;
@@ -503,8 +528,8 @@ body {
 }
 
 .journey-view-btn:hover:not(:disabled) {
-  background: rgba(34, 197, 94, 0.18);
-  border-color: rgba(34, 197, 94, 0.5);
+  background: rgba(249, 115, 22, 0.18);
+  border-color: rgba(249, 115, 22, 0.5);
 }
 
 .journey-view-btn:disabled {
@@ -534,15 +559,15 @@ body {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  background: var(--bg-card);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius-sm);
   padding: 8px 10px;
 }
 
 .event-item.selected {
-  border-color: rgba(59, 130, 246, 0.35);
-  background: rgba(59, 130, 246, 0.08);
+  border-color: rgba(249, 115, 22, 0.35);
+  background: rgba(249, 115, 22, 0.08);
 }
 
 .event-meta {
@@ -592,9 +617,9 @@ body {
 }
 
 .viz-mode-btn {
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  border: 1px solid rgba(249, 115, 22, 0.3);
   border-radius: 999px;
-  background: rgba(59, 130, 246, 0.12);
+  background: rgba(249, 115, 22, 0.12);
   color: var(--text-primary);
   padding: 7px 12px;
   font-size: 11px;
@@ -607,8 +632,8 @@ body {
 }
 
 .viz-mode-btn:hover {
-  background: rgba(59, 130, 246, 0.18);
-  border-color: rgba(59, 130, 246, 0.45);
+  background: rgba(249, 115, 22, 0.18);
+  border-color: rgba(249, 115, 22, 0.45);
 }
 
 .viz-controls {
