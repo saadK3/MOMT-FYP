@@ -14,6 +14,13 @@ import {
   setLabels,
 } from "./ground-plane.js";
 import {
+  initScene as initGroundPlane3D,
+  renderJourneyScene,
+  renderLiveScene,
+  renderSceneMessage,
+  setActive as setGroundPlane3DActive,
+} from "./ground-plane-3d.js";
+import {
   renderJourneyLoading,
   renderJourneyUnavailable,
   renderJourneyView,
@@ -28,7 +35,8 @@ import {
 } from "./stats-panel.js";
 
 const WS_URL = `ws://${window.location.hostname || "localhost"}:8765`;
-const PLOT_CONTAINER = "groundPlane";
+const PLOT_CONTAINER_2D = "groundPlane2d";
+const PLOT_CONTAINER_3D = "groundPlane3d";
 const MAX_CAMERA_EVENTS = 50;
 
 const wsClient = new WebSocketClient(WS_URL);
@@ -44,11 +52,17 @@ let cameraChangeEvents = [];
 let hasArchiveSnapshot = false;
 let journeyViewMode = false;
 let pendingJourneyGlobalId = null;
+let vizMode = "2d";
+let latestTrackingUpdate = null;
 
 function init() {
-  initPlot(PLOT_CONTAINER);
+  initPlot(PLOT_CONTAINER_2D);
+  initGroundPlane3D(PLOT_CONTAINER_3D, {
+    onSelectGlobalId: selectGlobalId,
+  });
   bindControls();
   bindSearch();
+  syncVizMode();
 
   wsClient.on("open", () => {
     updateConnectionStatus(true);
@@ -77,6 +91,7 @@ function init() {
 
   wsClient.on("tracking_update", (msg) => {
     latestTimestamp = msg.timestamp;
+    latestTrackingUpdate = msg;
 
     if (!hasArchiveSnapshot) {
       mergeJourneyUpdates(msg.journey_updates);
@@ -140,6 +155,18 @@ function bindControls() {
       renderMainView();
     });
 
+  document.getElementById("mode2dBtn")?.addEventListener("click", () => {
+    vizMode = "2d";
+    syncVizMode();
+    renderMainView();
+  });
+
+  document.getElementById("mode3dBtn")?.addEventListener("click", () => {
+    vizMode = "3d";
+    syncVizMode();
+    renderMainView();
+  });
+
   document
     .getElementById("journeyViewBtn")
     ?.addEventListener("click", openJourneyView);
@@ -170,8 +197,8 @@ function bindControls() {
       sidebar.style.width = `${newWidth}px`;
       
       // Force plot resize during drag for a smooth effect
-      if (document.getElementById(PLOT_CONTAINER)) {
-        Plotly.Plots.resize(PLOT_CONTAINER);
+      if (document.getElementById(PLOT_CONTAINER_2D)) {
+        Plotly.Plots.resize(PLOT_CONTAINER_2D);
       }
     });
 
@@ -181,8 +208,8 @@ function bindControls() {
         document.body.style.cursor = "";
         resizer.classList.remove("is-resizing");
         // One final resize to ensure it snapped correctly
-        if (document.getElementById(PLOT_CONTAINER)) {
-          Plotly.Plots.resize(PLOT_CONTAINER);
+        if (document.getElementById(PLOT_CONTAINER_2D)) {
+          Plotly.Plots.resize(PLOT_CONTAINER_2D);
         }
       }
     });
@@ -229,10 +256,7 @@ function selectGlobalId(globalId) {
   }
 
   renderSidebarState();
-
-  if (journeyViewMode) {
-    renderMainView();
-  }
+  renderMainView();
 }
 
 function openJourneyView() {
@@ -315,10 +339,19 @@ function renderMainView() {
 
   if (!journeyViewMode) {
     if (vizTitle) {
-      vizTitle.textContent = "Ground Plane - Real-Time";
+      vizTitle.textContent =
+        vizMode === "3d" ? "Ground Plane - Real-Time 3D" : "Ground Plane - Real-Time";
     }
     backButton?.classList.add("hidden");
-    renderLiveMap(PLOT_CONTAINER, vehicleManager, latestTimestamp);
+    if (vizMode === "3d") {
+      renderLiveScene(latestTrackingUpdate, {
+        selectedGlobalId,
+        showTrails: document.getElementById("trailToggle")?.checked ?? true,
+        showLabels: document.getElementById("labelsToggle")?.checked ?? true,
+      });
+    } else {
+      renderLiveMap(PLOT_CONTAINER_2D, vehicleManager, latestTimestamp);
+    }
     return;
   }
 
@@ -326,46 +359,82 @@ function renderMainView() {
 
   if (selectedGlobalId == null) {
     if (vizTitle) {
-      vizTitle.textContent = "Journey View";
+      vizTitle.textContent = vizMode === "3d" ? "Journey View 3D" : "Journey View";
     }
-    renderJourneyUnavailable(
-      PLOT_CONTAINER,
-      "Journey View - No Global ID selected",
-      "Search for a Global ID, then open Journey View.",
-    );
+    if (vizMode === "3d") {
+      renderSceneMessage(
+        "Journey View - No Global ID selected",
+        "Search for a Global ID, then open Journey View.",
+      );
+    } else {
+      renderJourneyUnavailable(
+        PLOT_CONTAINER_2D,
+        "Journey View - No Global ID selected",
+        "Search for a Global ID, then open Journey View.",
+      );
+    }
     return;
   }
 
   const summary = cameraJourneys.get(String(selectedGlobalId));
   if (!summary) {
     if (vizTitle) {
-      vizTitle.textContent = `Journey View - G${selectedGlobalId}`;
+      vizTitle.textContent =
+        vizMode === "3d"
+          ? `Journey View 3D - G${selectedGlobalId}`
+          : `Journey View - G${selectedGlobalId}`;
     }
-    renderJourneyUnavailable(
-      PLOT_CONTAINER,
-      `Journey View - G${selectedGlobalId}`,
-      "No archived journey is available for this Global ID.",
-    );
+    if (vizMode === "3d") {
+      renderSceneMessage(
+        `Journey View - G${selectedGlobalId}`,
+        "No archived journey is available for this Global ID.",
+      );
+    } else {
+      renderJourneyUnavailable(
+        PLOT_CONTAINER_2D,
+        `Journey View - G${selectedGlobalId}`,
+        "No archived journey is available for this Global ID.",
+      );
+    }
     return;
   }
 
   if (vizTitle) {
-    vizTitle.textContent = `Journey View - G${selectedGlobalId}`;
+    vizTitle.textContent =
+      vizMode === "3d"
+        ? `Journey View 3D - G${selectedGlobalId}`
+        : `Journey View - G${selectedGlobalId}`;
   }
 
   const journey = journeyViewCache.get(String(selectedGlobalId));
   if (!journey) {
     requestJourneyView(selectedGlobalId);
-    renderJourneyLoading(PLOT_CONTAINER, selectedGlobalId);
+    if (vizMode === "3d") {
+      renderSceneMessage(
+        `Journey View - Loading G${selectedGlobalId}...`,
+        "Preparing the full vehicle journey from the archive.",
+      );
+    } else {
+      renderJourneyLoading(PLOT_CONTAINER_2D, selectedGlobalId);
+    }
     return;
   }
 
-  renderJourneyView(PLOT_CONTAINER, journey, {
-    currentTimestamp: latestTimestamp,
-    activeVehicle,
-    showTrails: document.getElementById("trailToggle")?.checked ?? true,
-    showLabels: document.getElementById("labelsToggle")?.checked ?? true,
-  });
+  if (vizMode === "3d") {
+    renderJourneyScene(journey, {
+      currentTimestamp: latestTimestamp,
+      activeVehicle,
+      showTrails: document.getElementById("trailToggle")?.checked ?? true,
+      showLabels: document.getElementById("labelsToggle")?.checked ?? true,
+    });
+  } else {
+    renderJourneyView(PLOT_CONTAINER_2D, journey, {
+      currentTimestamp: latestTimestamp,
+      activeVehicle,
+      showTrails: document.getElementById("trailToggle")?.checked ?? true,
+      showLabels: document.getElementById("labelsToggle")?.checked ?? true,
+    });
+  }
 }
 
 function syncJourneyViewButton() {
@@ -401,6 +470,19 @@ function parseGlobalId(value) {
   const parsed = Number(match[0]);
   if (!Number.isInteger(parsed)) return null;
   return parsed;
+}
+
+function syncVizMode() {
+  const mode2dButton = document.getElementById("mode2dBtn");
+  const mode3dButton = document.getElementById("mode3dBtn");
+  const surface2d = document.getElementById(PLOT_CONTAINER_2D);
+  const surface3d = document.getElementById(PLOT_CONTAINER_3D);
+
+  mode2dButton?.classList.toggle("active", vizMode === "2d");
+  mode3dButton?.classList.toggle("active", vizMode === "3d");
+  surface2d?.classList.toggle("active", vizMode === "2d");
+  surface3d?.classList.toggle("active", vizMode === "3d");
+  setGroundPlane3DActive(vizMode === "3d");
 }
 
 document.addEventListener("DOMContentLoaded", init);

@@ -134,6 +134,24 @@
             </button>
           </div>
           <div class="viz-controls">
+            <div class="view-mode-toggle" id="viewModeToggle">
+              <button
+                type="button"
+                class="view-mode-btn active"
+                id="mode2dBtn"
+                data-mode="2d"
+              >
+                2D
+              </button>
+              <button
+                type="button"
+                class="view-mode-btn"
+                id="mode3dBtn"
+                data-mode="3d"
+              >
+                3D
+              </button>
+            </div>
             <label class="toggle-label">
               <input type="checkbox" id="trailToggle" checked />
               <span class="toggle-text">Trails</span>
@@ -144,7 +162,10 @@
             </label>
           </div>
         </div>
-        <div id="groundPlane" class="ground-plane-container"></div>
+        <div class="ground-plane-container">
+          <div id="groundPlane2d" class="viz-surface active"></div>
+          <div id="groundPlane3d" class="viz-surface viz-surface-3d"></div>
+        </div>
       </section>
     </main>
 
