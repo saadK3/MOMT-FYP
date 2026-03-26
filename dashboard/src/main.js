@@ -1,12 +1,13 @@
 /**
  * Dashboard entry point.
- * Wires together live tracking updates, search, sidebar summaries,
- * camera-change events, and the archive-backed Journey View.
+ * Keeps the existing 2D dashboard flow intact while adding
+ * Unity-powered 3D live and per-vehicle journey modes.
  */
 
 import "./style.css";
 import { WebSocketClient } from "./websocket-client.js";
 import { VehicleManager } from "./vehicle-manager.js";
+import { UnityEmbed } from "./unity-embed.js";
 import {
   initPlot,
   render as renderLiveMap,
@@ -29,10 +30,18 @@ import {
 
 const WS_URL = `ws://${window.location.hostname || "localhost"}:8765`;
 const PLOT_CONTAINER = "groundPlane";
+const UNITY_CONTAINER = "unityViewport";
 const MAX_CAMERA_EVENTS = 50;
+const VIEW_MODES = {
+  LIVE_2D: "2d-live",
+  JOURNEY_2D: "2d-journey",
+  LIVE_3D: "3d-live",
+  JOURNEY_3D: "3d-journey",
+};
 
 const wsClient = new WebSocketClient(WS_URL);
 const vehicleManager = new VehicleManager();
+const unityEmbed = new UnityEmbed(UNITY_CONTAINER);
 const cameraJourneys = new Map();
 const journeyViewCache = new Map();
 const seenCameraEventIds = new Set();
@@ -42,13 +51,14 @@ let uptime = 0;
 let selectedGlobalId = null;
 let cameraChangeEvents = [];
 let hasArchiveSnapshot = false;
-let journeyViewMode = false;
+let viewMode = VIEW_MODES.LIVE_2D;
 let pendingJourneyGlobalId = null;
 
 function init() {
   initPlot(PLOT_CONTAINER);
   bindControls();
   bindSearch();
+  bindUnityEvents();
 
   wsClient.on("open", () => {
     updateConnectionStatus(true);
@@ -109,7 +119,7 @@ function init() {
       pendingJourneyGlobalId = null;
     }
 
-    syncJourneyViewButton();
+    syncViewButtons();
     renderMainView();
   });
 
@@ -142,13 +152,20 @@ function bindControls() {
 
   document
     .getElementById("journeyViewBtn")
-    ?.addEventListener("click", openJourneyView);
+    ?.addEventListener("click", () => openJourneyView(VIEW_MODES.JOURNEY_2D));
+
+  document
+    .getElementById("journey3dViewBtn")
+    ?.addEventListener("click", () => openJourneyView(VIEW_MODES.JOURNEY_3D));
+
+  document.getElementById("view3dLiveBtn")?.addEventListener("click", () => {
+    viewMode = VIEW_MODES.LIVE_3D;
+    renderMainView();
+  });
 
   document.getElementById("backToLiveBtn")?.addEventListener("click", () => {
-    journeyViewMode = false;
-    pendingJourneyGlobalId = null;
+    viewMode = VIEW_MODES.LIVE_2D;
     renderMainView();
-    syncJourneyViewButton();
   });
 
   const resizer = document.getElementById("sidebarResizer");
@@ -214,9 +231,17 @@ function bindSearch() {
   });
 }
 
+function bindUnityEvents() {
+  unityEmbed.onVehicleClick = (globalId) => {
+    selectGlobalId(globalId);
+    requestJourneyView(globalId);
+    viewMode = VIEW_MODES.JOURNEY_3D;
+    renderMainView();
+  };
+}
+
 function handleSearch(rawValue) {
-  const globalId = parseGlobalId(rawValue);
-  selectGlobalId(globalId);
+  selectGlobalId(parseGlobalId(rawValue));
 }
 
 function selectGlobalId(globalId) {
@@ -228,22 +253,22 @@ function selectGlobalId(globalId) {
       globalId == null ? "" : `G${Number(globalId).toString()}`;
   }
 
+  if (selectedGlobalId != null) {
+    requestJourneyView(selectedGlobalId);
+  }
+
   renderSidebarState();
 
-  if (journeyViewMode) {
+  if (isJourneyMode(viewMode) || is3DMode(viewMode)) {
     renderMainView();
   }
 }
 
-function openJourneyView() {
-  if (selectedGlobalId == null) return;
+function openJourneyView(nextMode) {
+  if (!canOpenSelectedJourney()) return;
 
-  const summary = cameraJourneys.get(String(selectedGlobalId));
-  if (!summary) return;
-
-  journeyViewMode = true;
+  viewMode = nextMode;
   requestJourneyView(selectedGlobalId);
-  syncJourneyViewButton();
   renderMainView();
 }
 
@@ -259,6 +284,7 @@ function requestJourneyView(globalId) {
 
   if (sent) {
     pendingJourneyGlobalId = globalId;
+    syncViewButtons();
   }
 }
 
@@ -274,7 +300,6 @@ function pushCameraChangeEvents(events) {
   if (!events || events.length === 0) return;
 
   const freshEvents = [];
-
   for (const event of events) {
     if (!event?.event_id || seenCameraEventIds.has(event.event_id)) continue;
     seenCameraEventIds.add(event.event_id);
@@ -302,45 +327,50 @@ function renderSidebarState() {
 
   updateJourneyDetails(selectedGlobalId, journey, activeVehicle);
   updateCameraChangeLog(cameraChangeEvents, selectedGlobalId);
-  syncJourneyViewButton();
+  syncViewButtons();
 }
 
 function renderMainView() {
-  const vizTitle = document.getElementById("vizTitle");
-  const backButton = document.getElementById("backToLiveBtn");
-  const activeVehicle =
-    selectedGlobalId == null
-      ? null
-      : vehicleManager.getByGlobalId(selectedGlobalId);
+  syncViewButtons();
 
-  if (!journeyViewMode) {
-    if (vizTitle) {
-      vizTitle.textContent = "Ground Plane - Real-Time";
-    }
-    backButton?.classList.add("hidden");
-    renderLiveMap(PLOT_CONTAINER, vehicleManager, latestTimestamp);
-    return;
+  switch (viewMode) {
+    case VIEW_MODES.JOURNEY_2D:
+      render2DJourneyView();
+      return;
+    case VIEW_MODES.LIVE_3D:
+      render3DView("Unity 3D - Live All Vehicles");
+      return;
+    case VIEW_MODES.JOURNEY_3D:
+      render3DJourneyView();
+      return;
+    case VIEW_MODES.LIVE_2D:
+    default:
+      render2DLiveView();
   }
+}
 
-  backButton?.classList.remove("hidden");
+function render2DLiveView() {
+  showPlotContainer();
+  setVizTitle("Ground Plane - Real-Time");
+  renderLiveMap(PLOT_CONTAINER, vehicleManager, latestTimestamp);
+}
+
+function render2DJourneyView() {
+  showPlotContainer();
 
   if (selectedGlobalId == null) {
-    if (vizTitle) {
-      vizTitle.textContent = "Journey View";
-    }
+    setVizTitle("Journey View");
     renderJourneyUnavailable(
       PLOT_CONTAINER,
       "Journey View - No Global ID selected",
-      "Search for a Global ID, then open Journey View.",
+      "Search for a Global ID, then open the 2D Journey View.",
     );
     return;
   }
 
   const summary = cameraJourneys.get(String(selectedGlobalId));
   if (!summary) {
-    if (vizTitle) {
-      vizTitle.textContent = `Journey View - G${selectedGlobalId}`;
-    }
+    setVizTitle(`Journey View - G${selectedGlobalId}`);
     renderJourneyUnavailable(
       PLOT_CONTAINER,
       `Journey View - G${selectedGlobalId}`,
@@ -349,9 +379,7 @@ function renderMainView() {
     return;
   }
 
-  if (vizTitle) {
-    vizTitle.textContent = `Journey View - G${selectedGlobalId}`;
-  }
+  setVizTitle(`Journey View - G${selectedGlobalId}`);
 
   const journey = journeyViewCache.get(String(selectedGlobalId));
   if (!journey) {
@@ -362,36 +390,236 @@ function renderMainView() {
 
   renderJourneyView(PLOT_CONTAINER, journey, {
     currentTimestamp: latestTimestamp,
-    activeVehicle,
+    activeVehicle: vehicleManager.getByGlobalId(selectedGlobalId),
     showTrails: document.getElementById("trailToggle")?.checked ?? true,
     showLabels: document.getElementById("labelsToggle")?.checked ?? true,
   });
 }
 
-function syncJourneyViewButton() {
-  const button = document.getElementById("journeyViewBtn");
-  if (!button) return;
+function render3DView(title) {
+  showUnityContainer();
+  setVizTitle(title);
+  unityEmbed.setState(buildUnityStatePayload());
+}
 
-  const hasSelection =
-    selectedGlobalId != null && cameraJourneys.has(String(selectedGlobalId));
-  button.disabled = !hasSelection;
+function render3DJourneyView() {
+  const title =
+    selectedGlobalId == null
+      ? "Unity 3D - Vehicle Journey"
+      : `Unity 3D - G${selectedGlobalId} Journey`;
 
-  if (!hasSelection) {
-    button.textContent = "Open Journey View";
-    return;
+  if (selectedGlobalId != null) {
+    requestJourneyView(selectedGlobalId);
   }
 
-  if (journeyViewMode && selectedGlobalId != null) {
-    button.textContent = `Journey View Open for G${selectedGlobalId}`;
-    return;
+  render3DView(title);
+}
+
+function showPlotContainer() {
+  document.getElementById(PLOT_CONTAINER)?.classList.remove("hidden");
+  document.getElementById(UNITY_CONTAINER)?.classList.add("hidden");
+  document.getElementById("vizControls")?.classList.remove("hidden");
+  unityEmbed.hide();
+}
+
+function showUnityContainer() {
+  document.getElementById(PLOT_CONTAINER)?.classList.add("hidden");
+  document.getElementById(UNITY_CONTAINER)?.classList.remove("hidden");
+  document.getElementById("vizControls")?.classList.add("hidden");
+  unityEmbed.show();
+}
+
+function syncViewButtons() {
+  const journey2dBtn = document.getElementById("journeyViewBtn");
+  const journey3dBtn = document.getElementById("journey3dViewBtn");
+  const view3dLiveBtn = document.getElementById("view3dLiveBtn");
+  const backButton = document.getElementById("backToLiveBtn");
+
+  const hasJourneySelection = canOpenSelectedJourney();
+  const isJourneyLoading =
+    selectedGlobalId != null && pendingJourneyGlobalId === selectedGlobalId;
+
+  if (journey2dBtn) {
+    journey2dBtn.disabled = !hasJourneySelection;
+    journey2dBtn.classList.toggle(
+      "active",
+      viewMode === VIEW_MODES.JOURNEY_2D,
+    );
+    journey2dBtn.textContent = !hasJourneySelection
+      ? "Open Selected Vehicle in 2D"
+      : viewMode === VIEW_MODES.JOURNEY_2D
+        ? `2D Vehicle View Open for G${selectedGlobalId}`
+        : isJourneyLoading
+          ? `Loading selected vehicle...`
+          : `Open G${selectedGlobalId} in 2D`;
   }
 
-  if (pendingJourneyGlobalId === selectedGlobalId) {
-    button.textContent = `Loading G${selectedGlobalId}...`;
-    return;
+  if (journey3dBtn) {
+    journey3dBtn.disabled = !hasJourneySelection;
+    journey3dBtn.classList.toggle(
+      "active",
+      viewMode === VIEW_MODES.JOURNEY_3D,
+    );
+    journey3dBtn.textContent = !hasJourneySelection
+      ? "Open Selected Vehicle in 3D"
+      : viewMode === VIEW_MODES.JOURNEY_3D
+        ? `3D Vehicle View Open for G${selectedGlobalId}`
+        : isJourneyLoading
+          ? `Loading selected vehicle...`
+          : `Open G${selectedGlobalId} in 3D`;
   }
 
-  button.textContent = `Open Journey View for G${selectedGlobalId}`;
+  if (view3dLiveBtn) {
+    view3dLiveBtn.classList.toggle("active", viewMode === VIEW_MODES.LIVE_3D);
+    view3dLiveBtn.textContent =
+      viewMode === VIEW_MODES.LIVE_3D
+        ? "3D Live Map Open"
+        : "Open 3D Live Map";
+  }
+
+  backButton?.classList.toggle("hidden", viewMode === VIEW_MODES.LIVE_2D);
+}
+
+function canOpenSelectedJourney() {
+  return (
+    selectedGlobalId != null && cameraJourneys.has(String(selectedGlobalId))
+  );
+}
+
+function setVizTitle(title) {
+  const vizTitle = document.getElementById("vizTitle");
+  if (vizTitle) {
+    vizTitle.textContent = title;
+  }
+}
+
+function isJourneyMode(mode) {
+  return mode === VIEW_MODES.JOURNEY_2D || mode === VIEW_MODES.JOURNEY_3D;
+}
+
+function is3DMode(mode) {
+  return mode === VIEW_MODES.LIVE_3D || mode === VIEW_MODES.JOURNEY_3D;
+}
+
+function buildUnityStatePayload() {
+  const activeVehicles = vehicleManager.getActive();
+  const liveJourneySummaries = activeVehicles
+    .map((vehicle) => {
+      const summary = cameraJourneys.get(String(vehicle.global_id));
+      return serializeSummaryForUnity(summary, vehicle);
+    })
+    .filter(Boolean);
+
+  const summary =
+    selectedGlobalId == null
+      ? null
+      : cameraJourneys.get(String(selectedGlobalId)) || null;
+  const selectedJourney =
+    selectedGlobalId == null
+      ? null
+      : journeyViewCache.get(String(selectedGlobalId)) || null;
+
+  return {
+    viewMode,
+    timestamp: latestTimestamp,
+    selectedGlobalId: selectedGlobalId ?? 0,
+    mapTextureUrl: new URL(
+      "/clean_mosaic_3_feathered.png",
+      window.location.origin,
+    ).toString(),
+    liveVehicles: activeVehicles.map((vehicle) => ({
+      globalId: vehicle.global_id,
+      className: vehicle.class,
+      footprint: vehicle.footprint,
+      centroid: vehicle.centroid,
+      camera: vehicle.camera,
+      cameraStateLabel: vehicle.cameraStateLabel,
+      hasCameraChanged: Boolean(vehicle.hasCameraChanged),
+    })),
+    liveJourneySummaries,
+    selectedJourneySummary: serializeSummaryForUnity(
+      summary,
+      vehicleManager.getByGlobalId(selectedGlobalId),
+    ),
+    selectedJourney: serializeJourneyForUnity(selectedJourney),
+  };
+}
+
+function serializeSummaryForUnity(summary, activeVehicle = null) {
+  if (!summary && !activeVehicle) return null;
+
+  const currentCameraLabel =
+    activeVehicle?.cameraStateLabel ||
+    summary?.current_camera_label ||
+    "Unknown";
+  const hasCameraChanged = Boolean(
+    activeVehicle?.hasCameraChanged ?? summary?.has_camera_changed,
+  );
+
+  return {
+    globalId: summary?.global_id ?? activeVehicle?.global_id ?? 0,
+    vehicleClass: activeVehicle?.class || summary?.vehicle_class || "unknown",
+    currentCameraLabel,
+    hasCameraChanged,
+    transitionCount: summary?.transition_count ?? 0,
+    journeyText: summary ? buildJourneySummaryText(summary) : `${currentCameraLabel} only`,
+    lastTransitionText: summary
+      ? buildLastTransitionText(summary)
+      : "No camera changes recorded",
+  };
+}
+
+function serializeJourneyForUnity(journey) {
+  if (!journey) return null;
+
+  return {
+    globalId: journey.global_id,
+    currentCameraLabel: journey.summary?.current_camera_label || "Unknown",
+    transitionCount: journey.summary?.transition_count || 0,
+    hasCameraChanged: Boolean(journey.summary?.has_camera_changed),
+    pathPoints: (journey.path_points || []).map((point) => ({
+      timestamp: point.timestamp,
+      centroid: point.centroid,
+      footprint: point.footprint || null,
+      headingDeg: point.heading_deg ?? null,
+      cameraLabel: point.camera_label,
+      className: point.class,
+    })),
+    segments: (journey.segments || []).map((segment) => ({
+      cameraLabel: segment.camera_label,
+      points: (segment.points || []).map((point) => ({
+        timestamp: point.timestamp,
+        centroid: point.centroid,
+        footprint: point.footprint || null,
+        headingDeg: point.heading_deg ?? null,
+        cameraLabel: point.camera_label,
+        className: point.class,
+      })),
+    })),
+    transitions: (journey.transitions || []).map((transition) => ({
+      timestamp: transition.timestamp,
+      centroid: transition.centroid,
+      fromCameraLabel: transition.from_camera_label,
+      toCameraLabel: transition.to_camera_label,
+    })),
+  };
+}
+
+function buildJourneySummaryText(journey) {
+  const segments = journey?.journey || [];
+  if (!segments.length) return "Unknown";
+  if (segments.length === 1) return `${segments[0].camera_label} only`;
+  return segments.map((segment) => segment.camera_label).join(" -> ");
+}
+
+function buildLastTransitionText(journey) {
+  if (!journey?.last_transition) {
+    return "No camera changes recorded";
+  }
+  const transition = journey.last_transition;
+  return `${transition.from_camera_label} -> ${transition.to_camera_label} @ ${Number(
+    transition.timestamp,
+  ).toFixed(1)}s`;
 }
 
 function parseGlobalId(value) {
