@@ -103,9 +103,23 @@
           <div class="journey-card journey-card-empty" id="journeyDetails">
             Search a Global ID to inspect its camera journey.
           </div>
-          <button id="journeyViewBtn" class="journey-view-btn" disabled>
-            Open Journey View
-          </button>
+          <div class="journey-action-intro">Selected Vehicle Views</div>
+          <div class="journey-action-hint">
+            Use the buttons below for the selected Global ID. The header
+            3D button opens the live all-vehicles map.
+          </div>
+          <div class="journey-action-grid">
+            <button id="journeyViewBtn" class="journey-view-btn" disabled>
+              Open 2D Journey View
+            </button>
+            <button
+              id="journey3dViewBtn"
+              class="journey-view-btn journey-view-btn-secondary"
+              disabled
+            >
+              Open 3D Vehicle View
+            </button>
+          </div>
         </div>
 
         <div class="sidebar-section">
@@ -127,11 +141,14 @@
         <div class="viz-header">
           <div class="viz-heading">
             <h2 class="viz-title" id="vizTitle">Ground Plane - Real-Time</h2>
+            <button id="view3dLiveBtn" class="viz-mode-btn">
+              Open 3D Live Map
+            </button>
             <button id="backToLiveBtn" class="viz-mode-btn hidden">
-              Back to Live Map
+              Back to 2D Live Map
             </button>
           </div>
-          <div class="viz-controls">
+          <div class="viz-controls" id="vizControls">
             <label class="toggle-label">
               <input type="checkbox" id="trailToggle" checked />
               <span class="toggle-text">Trails</span>
@@ -143,6 +160,7 @@
           </div>
         </div>
         <div id="groundPlane" class="ground-plane-container"></div>
+        <div id="unityViewport" class="unity-embed hidden"></div>
       </section>
     </main>
 

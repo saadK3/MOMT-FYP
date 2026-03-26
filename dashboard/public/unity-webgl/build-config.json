@@ -1,0 +1,9 @@
+{
+    "loaderUrl": "Build/unity-webgl.loader.js",
+    "dataUrl": "Build/unity-webgl.data",
+    "frameworkUrl": "Build/unity-webgl.framework.js",
+    "codeUrl": "Build/unity-webgl.wasm",
+    "companyName": "MOMT",
+    "productName": "MOMTUnity3D",
+    "productVersion": "6000.3.3f1"
+}

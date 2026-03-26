@@ -10,7 +10,7 @@ from collections import Counter, defaultdict
 from typing import Dict, List, Optional
 
 from .clustering import agglomerative_clustering
-from .geometry import compute_centroid
+from .geometry import compute_centroid, compute_orientation
 from .matching import build_score_matrix
 from .tracker import CrossCameraTracker
 
@@ -36,6 +36,10 @@ class JourneyArchive:
     @staticmethod
     def _round_point(centroid) -> List[float]:
         return [round(float(centroid[0]), 3), round(float(centroid[1]), 3)]
+
+    @staticmethod
+    def _round_footprint(footprint) -> List[float]:
+        return [round(float(value), 3) for value in footprint]
 
     @staticmethod
     def _bucket_timestamp(timestamp: float, time_step: float) -> float:
@@ -289,10 +293,30 @@ class JourneyArchive:
                 camera_label = self._camera_state_label(camera_state)
                 avg_x = sum(point[0] for point in centroids) / len(centroids)
                 avg_y = sum(point[1] for point in centroids) / len(centroids)
-                primary_detection = group[-1]
+                primary_detection = next(
+                    (
+                        detection
+                        for detection in reversed(group)
+                        if len(detection["footprint"]) == 8
+                    ),
+                    None,
+                )
+                if primary_detection is None:
+                    continue
                 point = {
                     "timestamp": round(timestamp, 2),
                     "centroid": self._round_point((avg_x, avg_y)),
+                    "footprint": self._round_footprint(
+                        primary_detection["footprint"]
+                    ),
+                    "heading_deg": round(
+                        float(
+                            compute_orientation(
+                                primary_detection["footprint"]
+                            )
+                        ),
+                        2,
+                    ),
                     "camera_state": camera_state,
                     "camera_label": camera_label,
                     "camera": primary_detection["camera"],
