@@ -510,6 +510,25 @@ h1, h2, h3, h4, h5, h6,
   color: #f6c56d;
 }
 
+.journey-action-intro {
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+
+.journey-action-hint {
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.journey-action-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
 .journey-view-btn {
   width: 100%;
   border: 1px solid rgba(249, 115, 22, 0.35);
@@ -525,6 +544,26 @@ h1, h2, h3, h4, h5, h6,
     background 0.15s,
     border-color 0.15s,
     opacity 0.15s;
+}
+
+.journey-view-btn.active {
+  background: rgba(34, 197, 94, 0.22);
+  border-color: rgba(34, 197, 94, 0.58);
+}
+
+.journey-view-btn-secondary {
+  border-color: rgba(59, 130, 246, 0.35);
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.journey-view-btn-secondary:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.18);
+  border-color: rgba(59, 130, 246, 0.48);
+}
+
+.journey-view-btn-secondary.active {
+  background: rgba(59, 130, 246, 0.22);
+  border-color: rgba(59, 130, 246, 0.58);
 }
 
 .journey-view-btn:hover:not(:disabled) {
@@ -636,6 +675,11 @@ h1, h2, h3, h4, h5, h6,
   border-color: rgba(249, 115, 22, 0.45);
 }
 
+.viz-mode-btn.active {
+  background: rgba(59, 130, 246, 0.24);
+  border-color: rgba(59, 130, 246, 0.55);
+}
+
 .viz-controls {
   display: flex;
   flex-wrap: wrap;
@@ -692,6 +736,21 @@ h1, h2, h3, h4, h5, h6,
 .ground-plane-container {
   flex: 1;
   min-height: 0;
+  background: var(--bg-base);
+}
+
+.unity-embed {
+  flex: 1;
+  min-height: 0;
+  background: var(--bg-base);
+  position: relative;
+}
+
+.unity-embed-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
   background: var(--bg-base);
 }
 

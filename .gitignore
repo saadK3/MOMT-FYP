@@ -30,6 +30,20 @@ dashboard/.vite/
 .npm
 
 # ==================================================
+# Unity
+# ==================================================
+unity-view/[Ll]ibrary/
+unity-view/[Tt]emp/
+unity-view/[Oo]bj/
+unity-view/[Bb]uild/
+unity-view/[Bb]uilds/
+unity-view/[Ll]ogs/
+unity-view/[Uu]ser[Ss]ettings/
+unity-view/.vs/
+unity-view/.idea/
+unity-create.log
+
+# ==================================================
 # IDE & OS
 # ==================================================
 .vscode/
@@ -48,6 +62,10 @@ data/
 output/
 videos/
 assets/
+!unity-view/Assets/
+!unity-view/Assets/**
+!dashboard/public/unity-webgl/Build/
+!dashboard/public/unity-webgl/Build/**
 
 # ==================================================
 # Generated / temp files
