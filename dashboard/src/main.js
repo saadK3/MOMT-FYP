@@ -27,6 +27,7 @@ import {
   updateJourneyDetails,
   updateCameraChangeLog,
 } from "./stats-panel.js";
+import { updateVideoPanels } from "./video-panels.js";
 
 const WS_URL = `ws://${window.location.hostname || "localhost"}:8765`;
 const PLOT_CONTAINER = "groundPlane";
@@ -53,6 +54,7 @@ let cameraChangeEvents = [];
 let hasArchiveSnapshot = false;
 let viewMode = VIEW_MODES.LIVE_2D;
 let pendingJourneyGlobalId = null;
+let latestArrivedCameras = [];
 
 function init() {
   initPlot(PLOT_CONTAINER);
@@ -87,6 +89,7 @@ function init() {
 
   wsClient.on("tracking_update", (msg) => {
     latestTimestamp = msg.timestamp;
+    latestArrivedCameras = msg.stats?.arrived_cameras || [];
 
     if (!hasArchiveSnapshot) {
       mergeJourneyUpdates(msg.journey_updates);
@@ -103,7 +106,7 @@ function init() {
       uptime,
     });
 
-    updateCameras(stats.arrived_cameras || []);
+    updateCameras(latestArrivedCameras);
     renderSidebarState();
     renderMainView();
   });
@@ -327,6 +330,13 @@ function renderSidebarState() {
 
   updateJourneyDetails(selectedGlobalId, journey, activeVehicle);
   updateCameraChangeLog(cameraChangeEvents, selectedGlobalId);
+  updateVideoPanels({
+    latestTimestamp,
+    arrivedCameras: latestArrivedCameras,
+    selectedGlobalId,
+    journeySummary: journey,
+    activeVehicle,
+  });
   syncViewButtons();
 }
 

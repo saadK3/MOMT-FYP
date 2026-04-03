@@ -161,8 +161,36 @@
             </label>
           </div>
         </div>
-        <div id="groundPlane" class="ground-plane-container"></div>
-        <div id="unityViewport" class="unity-embed hidden"></div>
+        <div class="workspace-body">
+          <div class="stage-column">
+            <div id="groundPlane" class="ground-plane-container"></div>
+            <div id="unityViewport" class="unity-embed hidden"></div>
+          </div>
+          <aside class="video-rail" id="videoRail">
+            <div class="video-rail-header">
+              <div>
+                <div class="video-rail-kicker">Video Context</div>
+                <h3 class="video-rail-title" id="videoRailTitle">
+                  Live Camera Streams
+                </h3>
+                <p class="video-rail-subtitle" id="videoRailSubtitle">
+                  Synchronized frame previews aligned to the shared global timeline.
+                </p>
+              </div>
+              <div class="video-rail-info" id="videoRailInfo">
+                Each card shows the latest frame from its synchronized camera stream.
+              </div>
+            </div>
+            <div class="video-panel-grid" id="videoPanelGrid">
+              <div class="video-empty-state">
+                <div class="video-empty-title">Waiting for synchronized frames</div>
+                <div class="video-empty-copy">
+                  Start the tracking server and frame server to populate the live video rail.
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
       </section>
     </main>
 
