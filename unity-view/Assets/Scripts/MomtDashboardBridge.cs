@@ -1,9 +1,7 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using UnityEngine;
-using UnityEngine.Networking;
 using UnityEngine.Rendering;
 
 public sealed class MomtDashboardBridge : MonoBehaviour
@@ -13,9 +11,17 @@ public sealed class MomtDashboardBridge : MonoBehaviour
     private const float SymbolVerticalOffset = 0.24f;
     private const float JourneySampleScale = 0.55f;
     private const float JourneyLineHeight = 0.18f;
+    private const float GridSurfaceLift = 0.016f;
+    private const float MinorGridSpacing = 4f;
+    private const float MajorGridSpacing = 20f;
+    private const float MinorGridThickness = 0.08f;
+    private const float MajorGridThickness = 0.14f;
 
     private static readonly Color NeutralBodyColor = new Color(0.13f, 0.17f, 0.23f, 1f);
     private static readonly Color HaloColor = new Color(0.85f, 0.92f, 1f, 0.95f);
+    private static readonly Color GroundBaseColor = new Color(0.03f, 0.04f, 0.06f, 1f);
+    private static readonly Color MinorGridColor = new Color(0.90f, 0.93f, 0.98f, 0.26f);
+    private static readonly Color MajorGridColor = new Color(0.98f, 0.99f, 1f, 0.48f);
 
     private static readonly string[] SurfaceShaderCandidates =
     {
@@ -51,9 +57,12 @@ public sealed class MomtDashboardBridge : MonoBehaviour
     private MomtOrbitCamera _orbitCamera;
     private Camera _mainCamera;
     private GameObject _groundPlane;
+    private GameObject _minorGridPlane;
+    private GameObject _majorGridPlane;
     private Material _groundMaterial;
+    private Material _minorGridMaterial;
+    private Material _majorGridMaterial;
     private MomtVehicleMarker _hoveredMarker;
-    private string _loadedTextureUrl;
     private string _currentViewMode = "3d-live";
 
     private void Start()
@@ -79,11 +88,6 @@ public sealed class MomtDashboardBridge : MonoBehaviour
         _currentViewMode = string.IsNullOrWhiteSpace(payload.viewMode)
             ? "3d-live"
             : payload.viewMode;
-
-        if (!string.IsNullOrWhiteSpace(payload.mapTextureUrl))
-        {
-            StartCoroutine(LoadGroundTexture(payload.mapTextureUrl));
-        }
 
         ApplyLiveVehicles(
             payload.liveVehicles,
@@ -129,34 +133,23 @@ public sealed class MomtDashboardBridge : MonoBehaviour
         meshFilter.sharedMesh = MomtCoordinateMapper.CreateGroundMesh();
 
         var meshRenderer = _groundPlane.AddComponent<MeshRenderer>();
-        _groundMaterial = CreateSurfaceMaterial(new Color(0.16f, 0.18f, 0.24f, 1f));
-        _groundMaterial.mainTextureScale = Vector2.one;
+        _groundMaterial = CreateSurfaceMaterial(GroundBaseColor);
         meshRenderer.material = _groundMaterial;
         meshRenderer.shadowCastingMode = ShadowCastingMode.Off;
-        meshRenderer.receiveShadows = true;
-    }
+        meshRenderer.receiveShadows = false;
 
-    private IEnumerator LoadGroundTexture(string textureUrl)
-    {
-        if (string.Equals(_loadedTextureUrl, textureUrl, StringComparison.OrdinalIgnoreCase))
-        {
-            yield break;
-        }
-
-        using var request = UnityWebRequestTexture.GetTexture(textureUrl);
-        yield return request.SendWebRequest();
-
-        if (request.result != UnityWebRequest.Result.Success)
-        {
-            Debug.LogWarning($"Failed to load map texture: {request.error}");
-            yield break;
-        }
-
-        var texture = DownloadHandlerTexture.GetContent(request);
-        texture.wrapMode = TextureWrapMode.Clamp;
-        texture.filterMode = FilterMode.Bilinear;
-        _groundMaterial.mainTexture = texture;
-        _loadedTextureUrl = textureUrl;
+        _minorGridPlane = CreateGridPlane(
+            "GroundGridMinor",
+            MinorGridSpacing,
+            MinorGridThickness,
+            MinorGridColor
+        );
+        _majorGridPlane = CreateGridPlane(
+            "GroundGridMajor",
+            MajorGridSpacing,
+            MajorGridThickness,
+            MajorGridColor
+        );
     }
 
     private void ApplyLiveVehicles(
@@ -1088,6 +1081,53 @@ public sealed class MomtDashboardBridge : MonoBehaviour
         };
 
         return material;
+    }
+
+    private Material CreateGridMaterial(Color color)
+    {
+        var material = new Material(FindShader(LineShaderCandidates))
+        {
+            color = color
+        };
+
+        if (material.HasProperty("_Color"))
+        {
+            material.SetColor("_Color", color);
+        }
+
+        return material;
+    }
+
+    private GameObject CreateGridPlane(
+        string objectName,
+        float spacing,
+        float thickness,
+        Color color
+    )
+    {
+        var gridObject = new GameObject(objectName);
+        gridObject.transform.SetParent(_groundPlane.transform, false);
+        gridObject.transform.localPosition = new Vector3(0f, GridSurfaceLift, 0f);
+
+        var meshFilter = gridObject.AddComponent<MeshFilter>();
+        meshFilter.sharedMesh = MomtCoordinateMapper.CreateGridMesh(spacing, thickness);
+
+        var meshRenderer = gridObject.AddComponent<MeshRenderer>();
+        var material = CreateGridMaterial(color);
+        meshRenderer.material = material;
+        meshRenderer.shadowCastingMode = ShadowCastingMode.Off;
+        meshRenderer.receiveShadows = false;
+
+        if (string.Equals(objectName, "GroundGridMinor", StringComparison.Ordinal))
+        {
+            _minorGridMaterial = material;
+        }
+        else if (string.Equals(objectName, "GroundGridMajor", StringComparison.Ordinal))
+        {
+            _majorGridMaterial = material;
+        }
+
+        return gridObject;
     }
 
     private Shader FindShader(string[] candidates)
