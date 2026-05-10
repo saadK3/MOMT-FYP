@@ -5,7 +5,30 @@ Implements IOU and class-based matching (orientation removed for simplicity)
 
 import numpy as np
 from .geometry import parse_footprint, compute_iou
-from .config import IOU_THRESHOLD
+from .config import (
+    IOU_THRESHOLD,
+    DIRECTION_TOLERANCE_DEG,
+    SPEED_REL_TOLERANCE,
+    MIN_DIRECTION_SPEED,
+)
+
+
+def _angle_diff_deg(a, b):
+    """Smallest difference between two angles in degrees."""
+    if a is None or b is None:
+        return None
+    diff = abs(a - b) % 360.0
+    if diff > 180.0:
+        diff = 360.0 - diff
+    return diff
+
+
+def _speed_close(a, b):
+    """Relative speed tolerance check."""
+    if a is None or b is None:
+        return True
+    denom = max(a, b, 1e-6)
+    return abs(a - b) / denom <= SPEED_REL_TOLERANCE
 
 
 def compute_match_score(det1, det2):
@@ -36,6 +59,23 @@ def compute_match_score(det1, det2):
 
     if iou < IOU_THRESHOLD:
         return 0.0  # Insufficient overlap
+
+    # CONSTRAINT 4: Speed consistency (if both available)
+    if not _speed_close(det1.get("speed"), det2.get("speed")):
+        return 0.0
+
+    # CONSTRAINT 5: Direction consistency (when both are moving enough)
+    speed1 = det1.get("speed")
+    speed2 = det2.get("speed")
+    if (
+        speed1 is not None
+        and speed2 is not None
+        and speed1 >= MIN_DIRECTION_SPEED
+        and speed2 >= MIN_DIRECTION_SPEED
+    ):
+        angle_diff = _angle_diff_deg(det1.get("direction"), det2.get("direction"))
+        if angle_diff is not None and angle_diff > DIRECTION_TOLERANCE_DEG:
+            return 0.0
 
     # Return IOU as the final score (no orientation weighting)
     return iou

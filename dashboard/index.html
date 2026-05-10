@@ -159,6 +159,33 @@
               <input type="checkbox" id="labelsToggle" checked />
               <span class="toggle-text">Labels</span>
             </label>
+            <div id="offlinePlaybackControls" class="offline-playback-controls hidden">
+              <button id="playPauseBtn" class="viz-mode-btn">Pause</button>
+              <button id="restartPlaybackBtn" class="viz-mode-btn">Restart</button>
+              <input
+                id="playbackSeek"
+                class="playback-seek"
+                type="range"
+                min="0"
+                max="1000"
+                step="1"
+                value="0"
+              />
+              <span id="playbackTimeLabel" class="playback-time-label">0.0s / 0.0s</span>
+              <label class="toggle-label compact">
+                <input type="checkbox" id="loopPlaybackToggle" checked />
+                <span class="toggle-text">Loop</span>
+              </label>
+              <select id="playbackSpeedSelect" class="playback-speed-select">
+                <option value="0.25">0.25x</option>
+                <option value="0.5">0.5x</option>
+                <option value="0.75">0.75x</option>
+                <option value="1" selected>1x</option>
+                <option value="1.5">1.5x</option>
+                <option value="2">2x</option>
+                <option value="3">3x</option>
+              </select>
+            </div>
           </div>
         </div>
         <div class="workspace-body">

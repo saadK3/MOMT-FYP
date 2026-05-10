@@ -125,7 +125,7 @@ class CrossCameraTracker:
             'assignments': assignments
         }
 
-    def run(self, all_camera_data, start_time=None, end_time=None, time_step=0.1, progress_interval=10.0):
+    def run(self, all_camera_data, start_time=None, end_time=None, time_step=0.2, progress_interval=10.0):
         """
         Run tracking algorithm on all timestamps
 
@@ -133,7 +133,7 @@ class CrossCameraTracker:
             all_camera_data: Dictionary of all camera data
             start_time: Starting timestamp (default: auto-detect)
             end_time: Ending timestamp (default: auto-detect)
-            time_step: Time step in seconds (default: 0.1s = 10 FPS)
+            time_step: Time step in seconds (default: 0.2s = 5 FPS)
             progress_interval: Print progress every N seconds
 
         Returns:

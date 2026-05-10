@@ -9,6 +9,11 @@ Contains all hyperparameters and settings
 IOU_THRESHOLD = 0.3              # Minimum IOU to consider a match
 SCORE_THRESHOLD = 0.3            # Minimum IOU score for clustering (same as IOU_THRESHOLD)
 
+# Motion consistency gates (used when direction/speed are available)
+DIRECTION_TOLERANCE_DEG = 30.0   # Max allowed heading difference
+SPEED_REL_TOLERANCE = 0.40       # Max relative speed difference (40%)
+MIN_DIRECTION_SPEED = 0.5        # Skip direction gate if either object is slower than this
+
 # ============================================
 # MATCHING SCORE WEIGHTS
 # ============================================
@@ -34,8 +39,8 @@ CAMERA_TIME_OFFSETS = {
 }
 
 # Timestamp matching tolerance (in seconds)
-# At 10 FPS, frames are 0.1s apart, so 0.05s = half a frame
-TIMESTAMP_TOLERANCE = 0.05
+# At 5 FPS, frames are 0.2s apart, so 0.1s = half a frame
+TIMESTAMP_TOLERANCE = 0.1
 
 # ============================================
 # KEYPOINT CONFIGURATION

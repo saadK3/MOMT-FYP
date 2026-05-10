@@ -6,11 +6,13 @@
 
 import "./style.css";
 import { WebSocketClient } from "./websocket-client.js";
+import { PlaybackClient } from "./playback-client.js";
 import { VehicleManager } from "./vehicle-manager.js";
 import { UnityEmbed } from "./unity-embed.js";
 import {
   initPlot,
   render as renderLiveMap,
+  setVehicleClickHandler,
   setTrails,
   setLabels,
 } from "./ground-plane.js";
@@ -33,6 +35,9 @@ const WS_URL = `ws://${window.location.hostname || "localhost"}:8765`;
 const PLOT_CONTAINER = "groundPlane";
 const UNITY_CONTAINER = "unityViewport";
 const MAX_CAMERA_EVENTS = 50;
+const URL_PARAMS = new URLSearchParams(window.location.search);
+const APP_MODE = (URL_PARAMS.get("mode") || "offline").toLowerCase();
+const IS_OFFLINE_MODE = APP_MODE === "offline";
 const VIEW_MODES = {
   LIVE_2D: "2d-live",
   JOURNEY_2D: "2d-journey",
@@ -40,7 +45,9 @@ const VIEW_MODES = {
   JOURNEY_3D: "3d-journey",
 };
 
-const wsClient = new WebSocketClient(WS_URL);
+const dataClient = createDataClient();
+const playbackClient =
+  IS_OFFLINE_MODE && dataClient?.isPlaybackClient ? dataClient : null;
 const vehicleManager = new VehicleManager();
 const unityEmbed = new UnityEmbed(UNITY_CONTAINER);
 const cameraJourneys = new Map();
@@ -58,23 +65,27 @@ let latestArrivedCameras = [];
 
 function init() {
   initPlot(PLOT_CONTAINER);
+  setVehicleClickHandler((globalId) => {
+    selectGlobalId(globalId);
+  });
   bindControls();
+  configureOfflinePlaybackControls();
   bindSearch();
   bindUnityEvents();
 
-  wsClient.on("open", () => {
+  dataClient.on("open", () => {
     updateConnectionStatus(true);
   });
 
-  wsClient.on("close", () => {
+  dataClient.on("close", () => {
     updateConnectionStatus(false);
   });
 
-  wsClient.on("connection_ack", (msg) => {
+  dataClient.on("connection_ack", (msg) => {
     console.log("[Dashboard] Server says:", msg.message);
   });
 
-  wsClient.on("camera_journey_snapshot", (msg) => {
+  dataClient.on("camera_journey_snapshot", (msg) => {
     cameraJourneys.clear();
     journeyViewCache.clear();
     pendingJourneyGlobalId = null;
@@ -87,7 +98,7 @@ function init() {
     renderMainView();
   });
 
-  wsClient.on("tracking_update", (msg) => {
+  dataClient.on("tracking_update", (msg) => {
     latestTimestamp = msg.timestamp;
     latestArrivedCameras = msg.stats?.arrived_cameras || [];
 
@@ -111,7 +122,7 @@ function init() {
     renderMainView();
   });
 
-  wsClient.on("journey_view_data", (msg) => {
+  dataClient.on("journey_view_data", (msg) => {
     if (msg.journey) {
       journeyViewCache.set(String(msg.global_id), msg.journey);
     } else if (msg.global_id != null) {
@@ -126,7 +137,7 @@ function init() {
     renderMainView();
   });
 
-  wsClient.on("system_status", (msg) => {
+  dataClient.on("system_status", (msg) => {
     uptime = msg.uptime_s || 0;
     updateStats({
       activeVehicles: vehicleManager.count,
@@ -136,8 +147,16 @@ function init() {
     });
   });
 
-  wsClient.connect();
-  console.log("[Dashboard] Connecting to", WS_URL);
+  dataClient.on("playback_state", (msg) => {
+    syncOfflinePlaybackUi(msg);
+  });
+
+  dataClient.connect();
+  if (IS_OFFLINE_MODE) {
+    console.log("[Dashboard] Starting in offline playback mode");
+  } else {
+    console.log("[Dashboard] Connecting to", WS_URL);
+  }
 }
 
 function bindControls() {
@@ -206,6 +225,85 @@ function bindControls() {
         }
       }
     });
+  }
+}
+
+function configureOfflinePlaybackControls() {
+  const panel = document.getElementById("offlinePlaybackControls");
+  if (!panel) return;
+
+  if (!playbackClient) {
+    panel.classList.add("hidden");
+    return;
+  }
+
+  panel.classList.remove("hidden");
+
+  const playPauseBtn = document.getElementById("playPauseBtn");
+  const restartBtn = document.getElementById("restartPlaybackBtn");
+  const speedSelect = document.getElementById("playbackSpeedSelect");
+  const loopToggle = document.getElementById("loopPlaybackToggle");
+  const seekBar = document.getElementById("playbackSeek");
+
+  playPauseBtn?.addEventListener("click", () => {
+    const state = playbackClient.getPlaybackState();
+    if (state.isPlaying) playbackClient.pause();
+    else playbackClient.play();
+  });
+
+  restartBtn?.addEventListener("click", () => {
+    playbackClient.restart();
+  });
+
+  speedSelect?.addEventListener("change", (event) => {
+    playbackClient.setSpeed(event.target.value);
+  });
+
+  loopToggle?.addEventListener("change", (event) => {
+    playbackClient.setLoop(event.target.checked);
+  });
+
+  seekBar?.addEventListener("input", (event) => {
+    const progress = Number(event.target.value) / 1000;
+    playbackClient.seekToProgress(progress);
+  });
+
+  syncOfflinePlaybackUi(playbackClient.getPlaybackState());
+}
+
+function syncOfflinePlaybackUi(state) {
+  if (!playbackClient || !state) return;
+
+  const playPauseBtn = document.getElementById("playPauseBtn");
+  const speedSelect = document.getElementById("playbackSpeedSelect");
+  const loopToggle = document.getElementById("loopPlaybackToggle");
+  const seekBar = document.getElementById("playbackSeek");
+  const timeLabel = document.getElementById("playbackTimeLabel");
+
+  if (playPauseBtn) {
+    playPauseBtn.textContent = state.isPlaying ? "Pause" : "Play";
+    playPauseBtn.classList.toggle("active", state.isPlaying);
+  }
+
+  if (speedSelect) {
+    const normalizedSpeed = String(Number(state.speed));
+    if (speedSelect.value !== normalizedSpeed) {
+      speedSelect.value = normalizedSpeed;
+    }
+  }
+
+  if (loopToggle) {
+    loopToggle.checked = Boolean(state.loop);
+  }
+
+  if (seekBar) {
+    seekBar.value = String(Math.round((state.progress || 0) * 1000));
+  }
+
+  if (timeLabel) {
+    const now = Number(state.currentTimestamp) || 0;
+    const total = Number(state.endTimestamp) || 0;
+    timeLabel.textContent = `${formatSeconds(now)} / ${formatSeconds(total)}`;
   }
 }
 
@@ -280,7 +378,7 @@ function requestJourneyView(globalId) {
   if (journeyViewCache.has(String(globalId))) return;
   if (pendingJourneyGlobalId === globalId) return;
 
-  const sent = wsClient.send({
+  const sent = dataClient.send({
     type: "journey_view_request",
     global_id: globalId,
   });
@@ -639,6 +737,29 @@ function parseGlobalId(value) {
   const parsed = Number(match[0]);
   if (!Number.isInteger(parsed)) return null;
   return parsed;
+}
+
+function formatSeconds(value) {
+  return `${Number(value || 0).toFixed(1)}s`;
+}
+
+function createDataClient() {
+  if (!IS_OFFLINE_MODE) {
+    return new WebSocketClient(WS_URL);
+  }
+
+  const playbackFile = URL_PARAMS.get("file") || "/offline_playback_demo.json";
+  const playbackSpeed = Number(URL_PARAMS.get("speed") || "1");
+  const playbackStartTimestamp = Number(URL_PARAMS.get("start") || "12");
+  const playbackLoopParam = (URL_PARAMS.get("loop") || "1").toLowerCase();
+  const playbackLoop = !(playbackLoopParam === "0" || playbackLoopParam === "false");
+
+  return new PlaybackClient({
+    fileUrl: playbackFile,
+    speed: playbackSpeed,
+    startTimestamp: playbackStartTimestamp,
+    loop: playbackLoop,
+  });
 }
 
 document.addEventListener("DOMContentLoaded", init);

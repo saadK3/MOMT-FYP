@@ -685,6 +685,7 @@ h1, h2, h3, h4, h5, h6,
   display: flex;
   flex-wrap: wrap;
   gap: 16px;
+  align-items: center;
 }
 
 .workspace-body {
@@ -710,6 +711,54 @@ h1, h2, h3, h4, h5, h6,
   font-size: 12px;
   color: var(--text-muted);
   user-select: none;
+}
+
+.toggle-label.compact {
+  font-size: 11px;
+}
+
+.toggle-label.compact input[type="checkbox"] {
+  width: 28px;
+  height: 16px;
+}
+
+.toggle-label.compact input[type="checkbox"]::after {
+  width: 12px;
+  height: 12px;
+}
+
+.toggle-label.compact input[type="checkbox"]:checked::after {
+  left: 14px;
+}
+
+.offline-playback-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 6px;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.playback-seek {
+  width: 220px;
+  accent-color: var(--accent);
+}
+
+.playback-time-label {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-family: var(--mono);
+  min-width: 90px;
+}
+
+.playback-speed-select {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 11px;
+  font-family: var(--mono);
 }
 
 .toggle-label input[type="checkbox"] {
@@ -878,6 +927,7 @@ h1, h2, h3, h4, h5, h6,
 }
 
 .video-panel-image,
+.video-panel-video,
 .video-panel-placeholder {
   width: 100%;
   height: 100%;
@@ -886,6 +936,20 @@ h1, h2, h3, h4, h5, h6,
 .video-panel-image {
   display: block;
   object-fit: cover;
+}
+
+.video-panel-video {
+  display: block;
+  object-fit: cover;
+  background: #02060f;
+}
+
+.video-panel-overlay-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
 }
 
 .video-panel-placeholder {

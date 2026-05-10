@@ -12,6 +12,7 @@ export const MOSAIC_BOUNDS = {
 let plotInitialized = false;
 let showTrails = true;
 let showLabels = true;
+let onVehicleClick = null;
 
 /**
  * Initialize Plotly with an empty plot + mosaic background.
@@ -21,6 +22,7 @@ export function initPlot(containerId) {
   const layout = createBaseLayout("Ground Plane - Waiting for data...");
   const config = { responsive: true, displayModeBar: false };
   Plotly.newPlot(containerId, [], layout, config);
+  attachPlotClickHandler(containerId);
   plotInitialized = true;
 }
 
@@ -33,6 +35,10 @@ export function setTrails(enabled) {
 
 export function setLabels(enabled) {
   showLabels = enabled;
+}
+
+export function setVehicleClickHandler(handler) {
+  onVehicleClick = typeof handler === "function" ? handler : null;
 }
 
 /**
@@ -108,13 +114,13 @@ export function render(containerId, vehicleManager, timestamp) {
         family: "Inter, Arial Black, sans-serif",
       },
       name: `GID ${vehicle.global_id}`,
-      customdata: [[
+      customdata: x.map(() => [
         vehicle.global_id,
         vehicle.cameraStateLabel || vehicle.camera.toUpperCase(),
         vehicle.track_id,
         vehicle.class,
         vehicle.hasCameraChanged ? "Yes" : "No",
-      ]],
+      ]),
       hovertemplate:
         `<b>Global ID ${vehicle.global_id}</b><br>` +
         `Camera State: %{customdata[1]}<br>` +
@@ -134,6 +140,25 @@ export function render(containerId, vehicleManager, timestamp) {
   const layout = createBaseLayout(title);
   const config = { responsive: true, displayModeBar: false };
   Plotly.react(containerId, traces, layout, config);
+}
+
+function attachPlotClickHandler(containerId) {
+  const plotEl = document.getElementById(containerId);
+  if (!plotEl) return;
+  if (plotEl.dataset.vehicleClickBound === "1") return;
+
+  plotEl.on("plotly_click", (event) => {
+    const point = event?.points?.[0];
+    const custom = point?.customdata;
+    const rawGid = Array.isArray(custom) ? custom[0] : null;
+    const globalId = Number(rawGid);
+    if (!Number.isInteger(globalId)) return;
+    if (onVehicleClick) {
+      onVehicleClick(globalId);
+    }
+  });
+
+  plotEl.dataset.vehicleClickBound = "1";
 }
 
 /**

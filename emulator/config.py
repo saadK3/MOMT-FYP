@@ -20,8 +20,8 @@ CAMERA_TIME_OFFSETS = {
 }
 
 # Emulator settings
-FPS = 10 # Slow down to 1 frame per second for better visualization
-TIME_STEP = 1 / FPS  # 1/FPS = 1.0 seconds
+FPS = 5  # Slower replay for clearer demo visualization
+TIME_STEP = 1 / FPS
 
 # Time range to emulate (in seconds)
 # Global clock strategy: use full timeline where all cameras have data

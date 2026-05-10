@@ -6,47 +6,40 @@ const CAMERA_OFFSETS = {
   c004: 2.177,
   c005: 2.235,
 };
-const FPS = 10;
+const FPS = 5;
 const FRAME_SERVER_BASE = `http://${window.location.hostname || "localhost"}:5000`;
 const HEALTH_CHECK_MS = 10000;
-const VIDEO_REFRESH_MS = 400;
+const OBS_INDEX_URL = "/offline_observations_index.json";
+const FOOTPRINT_INDICES = [12, 13, 14, 15];
 
-let lastContextKey = "";
-let lastFrameSignature = "";
-let lastRenderedAt = 0;
 let frameServerStatus = "unknown";
 let lastHealthCheckAt = 0;
 let healthCheckPromise = null;
+let observationsLoadPromise = null;
+let observationsByGid = null;
 let lastArgs = null;
+let lastRenderSignature = "";
+const PREFETCHED_FRAME_URLS = new Set();
+const PREFETCH_INFLIGHT = new Set();
+const prefetchedUrls = new Set();
+const inFlightPrefetch = new Map();
+
+const cardElements = new Map();
 
 export function updateVideoPanels(args, { force = false } = {}) {
   lastArgs = args;
   ensureFrameServerHealth();
+  ensureObservationIndexLoaded();
 
   const model = buildVideoModel(args);
   if (!model) return;
 
-  const now = Date.now();
-  if (
-    !force &&
-    model.contextKey === lastContextKey &&
-    now - lastRenderedAt < VIDEO_REFRESH_MS
-  ) {
+  prefetchCardImages(model.cards);
+
+  if (!force && model.renderSignature === lastRenderSignature) {
     return;
   }
-
-  if (
-    !force &&
-    model.contextKey === lastContextKey &&
-    model.frameSignature === lastFrameSignature
-  ) {
-    return;
-  }
-
-  lastContextKey = model.contextKey;
-  lastFrameSignature = model.frameSignature;
-  lastRenderedAt = now;
-
+  lastRenderSignature = model.renderSignature;
   renderVideoModel(model);
 }
 
@@ -55,9 +48,7 @@ function ensureFrameServerHealth() {
   if (Date.now() - lastHealthCheckAt < HEALTH_CHECK_MS) return;
 
   lastHealthCheckAt = Date.now();
-  healthCheckPromise = fetch(`${FRAME_SERVER_BASE}/health`, {
-    cache: "no-store",
-  })
+  healthCheckPromise = fetch(`${FRAME_SERVER_BASE}/health`, { cache: "no-store" })
     .then((response) => {
       frameServerStatus = response.ok ? "ready" : "unavailable";
     })
@@ -66,9 +57,24 @@ function ensureFrameServerHealth() {
     })
     .finally(() => {
       healthCheckPromise = null;
-      if (lastArgs) {
-        updateVideoPanels(lastArgs, { force: true });
-      }
+      if (lastArgs) updateVideoPanels(lastArgs, { force: true });
+    });
+}
+
+function ensureObservationIndexLoaded() {
+  if (observationsByGid || observationsLoadPromise) return;
+
+  observationsLoadPromise = fetch(OBS_INDEX_URL, { cache: "no-store" })
+    .then((response) => (response.ok ? response.json() : null))
+    .then((payload) => {
+      observationsByGid = payload?.by_gid || {};
+    })
+    .catch(() => {
+      observationsByGid = {};
+    })
+    .finally(() => {
+      observationsLoadPromise = null;
+      if (lastArgs) updateVideoPanels(lastArgs, { force: true });
     });
 }
 
@@ -76,217 +82,145 @@ function buildVideoModel({
   latestTimestamp = 0,
   arrivedCameras = [],
   selectedGlobalId = null,
-  journeySummary = null,
-  activeVehicle = null,
 }) {
-  const selectedMode = selectedGlobalId != null && (journeySummary || activeVehicle);
+  const selectedMode = selectedGlobalId != null;
   const cards = selectedMode
-    ? buildSelectedCards({
-        latestTimestamp,
-        selectedGlobalId,
-        journeySummary,
-        activeVehicle,
-      })
+    ? buildSelectedCards({ selectedGlobalId })
     : buildLiveCards({ latestTimestamp, arrivedCameras });
 
   const title = selectedMode
-    ? `G${selectedGlobalId} Video Streams`
-    : "Live Camera Streams";
+    ? `G${selectedGlobalId} Camera Frames`
+    : "Live Camera Frames";
   const subtitle = selectedMode
-    ? "Representative camera previews for the selected Global ID across its journey."
+    ? "One representative frame per camera where the selected vehicle appears."
     : "Synchronized frame previews aligned to the shared global timeline.";
-
   const info = buildInfoMessage(selectedMode, cards.length > 0);
-  const contextKey = JSON.stringify({
-    mode: selectedMode ? "selected" : "live",
-    globalId: selectedGlobalId,
-    cameras: cards.map((card) => card.key),
-    status: frameServerStatus,
+
+  const renderSignature = JSON.stringify({
+    selectedGlobalId,
+    frameServerStatus,
+    cards: cards.map((card) => ({
+      key: card.key,
+      frame: card.frameNumber,
+      obsTs: card.observation?.global_ts ?? null,
+    })),
   });
-  const frameSignature = cards
-    .map((card) => `${card.key}:${card.frame ?? "na"}`)
-    .join("|");
 
   return {
     title,
     subtitle,
     info,
     cards,
-    contextKey,
-    frameSignature,
+    renderSignature,
   };
 }
 
 function buildInfoMessage(selectedMode, hasCards) {
   if (frameServerStatus === "unavailable") {
-    return "Frame previews are unavailable. Start tools/frame_server.py to enable the video panels.";
+    return "Frame previews are unavailable. Start tools/frame_server.py to enable frame panels.";
   }
-
-  if (!hasCards && selectedMode) {
-    return "No camera segments are available yet for the selected Global ID.";
+  if (selectedMode && observationsByGid == null) {
+    return "Loading observation index for footprint overlays...";
   }
-
+  if (selectedMode && !hasCards) {
+    return "Selected GID is not visible in any camera at this moment.";
+  }
   return selectedMode
-    ? "Current cameras are highlighted first. Past cameras use representative archive frames."
-    : "Each card shows the latest frame from its synchronized camera stream.";
+    ? "Panels show one representative frame for each camera that observed the selected vehicle."
+    : "Select a Global ID to show synchronized camera frames with overlays.";
+}
+
+function buildSelectedCards({ selectedGlobalId }) {
+  if (!observationsByGid) return [];
+  const gidKey = String(selectedGlobalId);
+  const byCamera = observationsByGid[gidKey];
+  if (!byCamera) return [];
+
+  const cards = [];
+  for (const [camera, observations] of Object.entries(byCamera)) {
+    const observation = pickRepresentativeObservation(observations);
+    if (!observation) continue;
+
+    cards.push({
+      key: `gid${selectedGlobalId}:${camera}`,
+      camera,
+      cameraLabel: camera.toUpperCase(),
+      badge: "Seen",
+      badgeTone: "archive",
+      title: `G${selectedGlobalId} in ${camera.toUpperCase()}`,
+      meta: `Representative frame ${observation.frame_number} • t=${formatSeconds(observation.global_ts)}`,
+      detail: `Track ${observation.track_id} in ${camera.toUpperCase()}`,
+      frameNumber: observation.frame_number,
+      imageUrl: buildFrameUrl(camera, observation.frame_number),
+      observation,
+      selectedGlobalId,
+      emphasis: true,
+    });
+  }
+
+  return cards.sort((left, right) => left.camera.localeCompare(right.camera));
 }
 
 function buildLiveCards({ latestTimestamp, arrivedCameras }) {
   const arrivedSet = new Set(arrivedCameras || []);
-
   return CAMERA_IDS.map((camera) => {
-    const frameInfo = getFrameInfo(camera, latestTimestamp);
-    const inLatestDecision = arrivedSet.has(camera);
-    const localTime = frameInfo?.localTime ?? null;
-
+    const frameNumber = frameForTimestamp(camera, latestTimestamp);
     return {
       key: `live:${camera}`,
       camera,
       cameraLabel: camera.toUpperCase(),
-      badge: inLatestDecision ? "Live" : "Idle",
-      badgeTone: inLatestDecision ? "live" : "idle",
-      title: inLatestDecision
-        ? "Latest synchronized frame"
-        : "No packet in latest decision",
-      meta:
-        frameInfo == null
-          ? "Camera is outside the current synchronized window."
-          : `Frame ${frameInfo.frame} • global ${formatSeconds(latestTimestamp)} • local ${formatSeconds(localTime)}`,
-      detail: inLatestDecision
-        ? "Aligned to the same shared replay timestamp as the map."
-        : "This camera did not contribute detections in the latest hub decision.",
-      frame: frameInfo?.frame ?? null,
-      imageUrl:
-        frameInfo == null || frameServerStatus === "unavailable"
-          ? null
-          : buildFrameUrl(camera, frameInfo.frame),
+      badge: arrivedSet.has(camera) ? "Live" : "Idle",
+      badgeTone: arrivedSet.has(camera) ? "live" : "idle",
+      title: "Synchronized camera frame",
+      meta: `global ${formatSeconds(latestTimestamp)} • frame ${frameNumber}`,
+      detail: "Select a Global ID to enable vehicle overlay.",
+      frameNumber,
+      imageUrl: buildFrameUrl(camera, frameNumber),
+      observation: null,
+      selectedGlobalId: null,
       emphasis: false,
     };
   });
 }
 
-function buildSelectedCards({
-  latestTimestamp,
-  selectedGlobalId,
-  journeySummary,
-  activeVehicle,
-}) {
-  const cardsByCamera = new Map();
-  const journeySegments = journeySummary?.journey || [];
-  const currentState = new Set(
-    activeVehicle?.cameraState ||
-      journeySummary?.current_camera_state ||
-      [],
-  );
+function frameForTimestamp(camera, globalTimestamp) {
+  const localTime = Math.max(0, globalTimestamp - (CAMERA_OFFSETS[camera] || 0));
+  return Math.max(0, Math.floor(localTime * FPS));
+}
 
-  if (journeySegments.length > 0) {
-    for (const segment of journeySegments) {
-      const segmentTimestamp = pickSegmentTimestamp(
-        segment,
-        latestTimestamp,
-        currentState,
-      );
+function buildFrameUrl(camera, frameNumber) {
+  return `${FRAME_SERVER_BASE}/frame/${camera}/${frameNumber}`;
+}
 
-      for (const camera of segment.camera_state || []) {
-        const frameInfo = getFrameInfo(camera, segmentTimestamp);
-        const existing = cardsByCamera.get(camera);
-        const candidate = {
-          key: `selected:${camera}`,
-          camera,
-          cameraLabel: camera.toUpperCase(),
-          badge: currentState.has(camera)
-            ? "Current"
-            : segment.camera_state.length > 1
-              ? "Overlap"
-              : "Archive",
-          badgeTone: currentState.has(camera)
-            ? "current"
-            : segment.camera_state.length > 1
-              ? "overlap"
-              : "archive",
-          title: currentState.has(camera)
-            ? `G${selectedGlobalId} currently visible`
-            : `Representative view for G${selectedGlobalId}`,
-          meta:
-            frameInfo == null
-              ? `Segment ${formatSeconds(segment.entered_at)} - ${formatSeconds(segment.last_seen_at)}`
-              : `Frame ${frameInfo.frame} • global ${formatSeconds(segmentTimestamp)} • local ${formatSeconds(frameInfo.localTime)}`,
-          detail: currentState.has(camera)
-            ? `Selected vehicle is currently associated with ${segment.camera_label}.`
-            : `Representative frame from ${segment.camera_label} during ${formatSeconds(segment.entered_at)} - ${formatSeconds(segment.last_seen_at)}.`,
-          frame: frameInfo?.frame ?? null,
-          imageUrl:
-            frameInfo == null || frameServerStatus === "unavailable"
-              ? null
-              : buildFrameUrl(camera, frameInfo.frame),
-          emphasis: currentState.has(camera),
-          sortTimestamp: segment.last_seen_at,
-        };
+function findNearestObservation(observations, timestamp, toleranceSeconds) {
+  if (!Array.isArray(observations) || observations.length === 0) return null;
 
-        if (!existing || candidate.sortTimestamp >= existing.sortTimestamp) {
-          cardsByCamera.set(camera, candidate);
-        }
-      }
-    }
-  } else if (activeVehicle?.cameraState?.length) {
-    for (const camera of activeVehicle.cameraState) {
-      const frameInfo = getFrameInfo(camera, latestTimestamp);
-      cardsByCamera.set(camera, {
-        key: `selected:${camera}`,
-        camera,
-        cameraLabel: camera.toUpperCase(),
-        badge: "Current",
-        badgeTone: "current",
-        title: `G${selectedGlobalId} currently visible`,
-        meta:
-          frameInfo == null
-            ? "Current frame unavailable for this camera."
-            : `Frame ${frameInfo.frame} • global ${formatSeconds(latestTimestamp)} • local ${formatSeconds(frameInfo.localTime)}`,
-        detail: "Selected vehicle is active in this camera state right now.",
-        frame: frameInfo?.frame ?? null,
-        imageUrl:
-          frameInfo == null || frameServerStatus === "unavailable"
-            ? null
-            : buildFrameUrl(camera, frameInfo.frame),
-        emphasis: true,
-        sortTimestamp: latestTimestamp,
-      });
-    }
+  let lo = 0;
+  let hi = observations.length - 1;
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (observations[mid].global_ts < timestamp) lo = mid + 1;
+    else hi = mid;
   }
 
-  return [...cardsByCamera.values()].sort((left, right) => {
-    if (left.emphasis !== right.emphasis) {
-      return left.emphasis ? -1 : 1;
+  const candidates = [observations[lo], observations[lo - 1], observations[lo + 1]].filter(Boolean);
+  let best = null;
+  let bestDiff = Infinity;
+  for (const candidate of candidates) {
+    const diff = Math.abs(candidate.global_ts - timestamp);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      best = candidate;
     }
-    return right.sortTimestamp - left.sortTimestamp;
-  });
-}
-
-function pickSegmentTimestamp(segment, latestTimestamp, currentState) {
-  const cameras = segment.camera_state || [];
-  const isCurrent = cameras.some((camera) => currentState.has(camera));
-  if (isCurrent) {
-    return Math.max(segment.entered_at, Math.min(latestTimestamp, segment.last_seen_at));
   }
-
-  return (segment.entered_at + segment.last_seen_at) / 2;
+  if (!best || bestDiff > toleranceSeconds) return null;
+  return best;
 }
 
-function getFrameInfo(camera, globalTimestamp) {
-  const offset = CAMERA_OFFSETS[camera];
-  if (offset == null) return null;
-
-  const localTime = globalTimestamp - offset;
-  if (!Number.isFinite(localTime) || localTime < 0) return null;
-
-  return {
-    localTime,
-    frame: Math.max(0, Math.floor(localTime * FPS + 1e-6)),
-  };
-}
-
-function buildFrameUrl(camera, frame) {
-  return `${FRAME_SERVER_BASE}/frame/${camera}/${frame}?t=${frame}`;
+function pickRepresentativeObservation(observations) {
+  if (!Array.isArray(observations) || observations.length === 0) return null;
+  const mid = Math.floor(observations.length / 2);
+  return observations[mid] || observations[0];
 }
 
 function renderVideoModel(model) {
@@ -294,7 +228,6 @@ function renderVideoModel(model) {
   const subtitleEl = document.getElementById("videoRailSubtitle");
   const infoEl = document.getElementById("videoRailInfo");
   const gridEl = document.getElementById("videoPanelGrid");
-
   if (!titleEl || !subtitleEl || !infoEl || !gridEl) return;
 
   titleEl.textContent = model.title;
@@ -305,67 +238,197 @@ function renderVideoModel(model) {
   if (model.cards.length === 0) {
     gridEl.innerHTML = `
       <div class="video-empty-state">
-        <div class="video-empty-title">No video previews available</div>
+        <div class="video-empty-title">No synchronized frames</div>
         <div class="video-empty-copy">
-          Select a vehicle with journey history or wait for synchronized live frames.
+          Select a Global ID and move playback to a timestamp where it is visible.
         </div>
       </div>
     `;
+    cardElements.clear();
     return;
   }
 
-  gridEl.innerHTML = model.cards
-    .map((card) => {
-      const imageHtml = card.imageUrl
-        ? `
-          <img
-            class="video-panel-image"
-            src="${card.imageUrl}"
-            alt="${card.cameraLabel} frame preview"
-            loading="lazy"
-            data-camera="${card.camera}"
-            data-frame="${card.frame}"
-          />
-        `
-        : `
-          <div class="video-panel-placeholder">
-            <span>${frameServerStatus === "unavailable" ? "Frame preview unavailable" : "No frame available"}</span>
-          </div>
-        `;
+  prefetchCardFrames(model.cards);
+  reconcileCards(gridEl, model.cards);
+}
 
-      return `
-        <article class="video-panel-card ${card.emphasis ? "emphasis" : ""}">
-          <div class="video-panel-media">
-            ${imageHtml}
-            <div class="video-panel-overlay">
-              <span class="video-panel-camera">${card.cameraLabel}</span>
-              <span class="video-panel-badge ${card.badgeTone}">${card.badge}</span>
-            </div>
-          </div>
-          <div class="video-panel-body">
-            <div class="video-panel-title">${card.title}</div>
-            <div class="video-panel-meta">${card.meta}</div>
-            <div class="video-panel-detail">${card.detail}</div>
-          </div>
-        </article>
-      `;
-    })
-    .join("");
+function reconcileCards(gridEl, cards) {
+  const wantedKeys = new Set(cards.map((card) => card.key));
 
-  for (const image of gridEl.querySelectorAll(".video-panel-image")) {
-    image.addEventListener("error", handleImageError, { once: true });
+  for (const [key, cardEl] of cardElements.entries()) {
+    if (wantedKeys.has(key)) continue;
+    cardEl.root.remove();
+    cardElements.delete(key);
+  }
+
+  cards.forEach((card) => {
+    let cardEl = cardElements.get(card.key);
+    if (!cardEl) {
+      cardEl = createCardElement(card);
+      cardElements.set(card.key, cardEl);
+      gridEl.appendChild(cardEl.root);
+    }
+    updateCard(cardEl, card);
+  });
+}
+
+function createCardElement(card) {
+  const root = document.createElement("article");
+  root.className = `video-panel-card ${card.emphasis ? "emphasis" : ""}`;
+
+  const media = document.createElement("div");
+  media.className = "video-panel-media";
+
+  const image = document.createElement("img");
+  image.className = "video-panel-image";
+  image.alt = `${card.cameraLabel} frame preview`;
+  image.loading = "eager";
+  image.decoding = "async";
+  image.fetchPriority = "high";
+
+  const canvas = document.createElement("canvas");
+  canvas.className = "video-panel-overlay-canvas";
+
+  const overlay = document.createElement("div");
+  overlay.className = "video-panel-overlay";
+  const cameraLabel = document.createElement("span");
+  cameraLabel.className = "video-panel-camera";
+  const badge = document.createElement("span");
+  badge.className = "video-panel-badge";
+  overlay.appendChild(cameraLabel);
+  overlay.appendChild(badge);
+
+  media.appendChild(image);
+  media.appendChild(canvas);
+  media.appendChild(overlay);
+
+  const body = document.createElement("div");
+  body.className = "video-panel-body";
+  const title = document.createElement("div");
+  title.className = "video-panel-title";
+  const meta = document.createElement("div");
+  meta.className = "video-panel-meta";
+  const detail = document.createElement("div");
+  detail.className = "video-panel-detail";
+  body.appendChild(title);
+  body.appendChild(meta);
+  body.appendChild(detail);
+
+  root.appendChild(media);
+  root.appendChild(body);
+
+  return {
+    root,
+    image,
+    canvas,
+    cameraLabel,
+    badge,
+    title,
+    meta,
+    detail,
+    lastImageUrl: "",
+  };
+}
+
+function updateCard(cardEl, card) {
+  cardEl.root.classList.toggle("emphasis", card.emphasis);
+  cardEl.cameraLabel.textContent = card.cameraLabel;
+  cardEl.badge.className = `video-panel-badge ${card.badgeTone}`;
+  cardEl.badge.textContent = card.badge;
+  cardEl.title.textContent = card.title;
+  cardEl.meta.textContent = card.meta;
+  cardEl.detail.textContent = card.detail;
+
+  if (cardEl.lastImageUrl !== card.imageUrl) {
+    cardEl.image.src = card.imageUrl;
+    cardEl.lastImageUrl = card.imageUrl;
+  }
+
+  cardEl.image.onload = () => drawOverlay(cardEl, card);
+  if (cardEl.image.complete && cardEl.image.naturalWidth > 0) {
+    drawOverlay(cardEl, card);
   }
 }
 
-function handleImageError() {
-  if (frameServerStatus !== "unavailable") {
-    frameServerStatus = "unavailable";
-    if (lastArgs) {
-      updateVideoPanels(lastArgs, { force: true });
-    }
+function prefetchCardFrames(cards) {
+  for (const card of cards) {
+    const url = card.imageUrl;
+    if (!url) continue;
+    if (PREFETCHED_FRAME_URLS.has(url) || PREFETCH_INFLIGHT.has(url)) continue;
+    PREFETCH_INFLIGHT.add(url);
+    fetch(url, { cache: "force-cache" })
+      .then((response) => {
+        if (!response.ok) return null;
+        return response.arrayBuffer();
+      })
+      .finally(() => {
+        PREFETCH_INFLIGHT.delete(url);
+        PREFETCHED_FRAME_URLS.add(url);
+      });
   }
+}
+
+function drawOverlay(cardEl, card) {
+  const observation = card.observation;
+  const image = cardEl.image;
+  const canvas = cardEl.canvas;
+
+  const width = Math.max(1, image.clientWidth || image.naturalWidth || 1);
+  const height = Math.max(1, image.clientHeight || image.naturalHeight || 1);
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
+  }
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  ctx.clearRect(0, 0, width, height);
+  if (!observation) return;
+
+  const points = footprintFromKeypoints(observation.det_keypoints, width, height);
+  if (!points) return;
+
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = "rgba(34, 197, 94, 0.98)";
+  ctx.fillStyle = "rgba(34, 197, 94, 0.14)";
+  ctx.beginPath();
+  ctx.moveTo(points[0][0], points[0][1]);
+  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1]);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+}
+
+function footprintFromKeypoints(keypoints, width, height) {
+  if (!Array.isArray(keypoints) || keypoints.length < 32) return null;
+  const points = [];
+  for (const idx of FOOTPRINT_INDICES) {
+    const x = Number(keypoints[idx * 2]);
+    const y = Number(keypoints[idx * 2 + 1]);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    points.push([x * width, y * height]);
+  }
+  return points;
 }
 
 function formatSeconds(value) {
   return `${Number(value || 0).toFixed(1)}s`;
+}
+
+function prefetchCardImages(cards) {
+  for (const card of cards) {
+    const url = card.imageUrl;
+    if (!url || prefetchedUrls.has(url) || inFlightPrefetch.has(url)) continue;
+    const promise = fetch(url, { cache: "force-cache" })
+      .then((response) => {
+        if (response.ok) {
+          prefetchedUrls.add(url);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        inFlightPrefetch.delete(url);
+      });
+    inFlightPrefetch.set(url, promise);
+  }
 }

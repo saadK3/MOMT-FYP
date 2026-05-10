@@ -62,7 +62,10 @@ def load_detections_from_json(json_path: Path, camera_id: str) -> Optional[Dict[
                     'det_birdeye': det['det_birdeye'],  # Keep original name for tracking
                     'det_kp_class_name': det.get('det_kp_class_name', 'Unknown'),  # Keep original name
                     'det_timestamp': timestamp,  # Add timestamp field
-                    'det_impath': det['det_impath']  # Keep original name
+                    'det_impath': det['det_impath'],  # Keep original name
+                    'det_keypoints': det.get('det_keypoints', []),
+                    'det_im_w': det.get('det_im_w'),
+                    'det_im_h': det.get('det_im_h'),
                 }
 
                 detections_by_timestamp[timestamp].append(detection)
