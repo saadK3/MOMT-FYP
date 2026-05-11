@@ -32,7 +32,7 @@ public sealed class MomtOrbitCamera : MonoBehaviour
 
     private void LateUpdate()
     {
-        if (Input.GetMouseButton(0))
+        if (Input.GetMouseButton(0) && !MomtRoadPointProbe.IsProbeGestureActive())
         {
             yaw += Input.GetAxis("Mouse X") * orbitSpeed;
             pitch -= Input.GetAxis("Mouse Y") * orbitSpeed;

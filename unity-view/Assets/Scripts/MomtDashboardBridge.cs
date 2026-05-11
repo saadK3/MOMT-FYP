@@ -1,7 +1,10 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Runtime.InteropServices;
 using UnityEngine;
+using UnityEngine.Networking;
 using UnityEngine.Rendering;
 
 public sealed class MomtDashboardBridge : MonoBehaviour
@@ -59,10 +62,12 @@ public sealed class MomtDashboardBridge : MonoBehaviour
     private GameObject _groundPlane;
     private GameObject _minorGridPlane;
     private GameObject _majorGridPlane;
+    private GameObject _roadEnvironment;
     private Material _groundMaterial;
     private Material _minorGridMaterial;
     private Material _majorGridMaterial;
     private MomtVehicleMarker _hoveredMarker;
+    private string _activeMapTextureUrl;
     private string _currentViewMode = "3d-live";
 
     private void Start()
@@ -85,6 +90,7 @@ public sealed class MomtDashboardBridge : MonoBehaviour
         }
 
         EnsureSceneScaffold();
+        ApplyGroundTexture(payload.mapTextureUrl);
         _currentViewMode = string.IsNullOrWhiteSpace(payload.viewMode)
             ? "3d-live"
             : payload.viewMode;
@@ -128,6 +134,13 @@ public sealed class MomtDashboardBridge : MonoBehaviour
             return;
         }
 
+#if UNITY_EDITOR
+        if (GetComponent<MomtRoadPointProbe>() == null)
+        {
+            gameObject.AddComponent<MomtRoadPointProbe>();
+        }
+#endif
+
         _groundPlane = new GameObject("GroundPlane");
         var meshFilter = _groundPlane.AddComponent<MeshFilter>();
         meshFilter.sharedMesh = MomtCoordinateMapper.CreateGroundMesh();
@@ -137,6 +150,7 @@ public sealed class MomtDashboardBridge : MonoBehaviour
         meshRenderer.material = _groundMaterial;
         meshRenderer.shadowCastingMode = ShadowCastingMode.Off;
         meshRenderer.receiveShadows = false;
+        TryLoadEditorGroundTexture();
 
         _minorGridPlane = CreateGridPlane(
             "GroundGridMinor",
@@ -150,6 +164,82 @@ public sealed class MomtDashboardBridge : MonoBehaviour
             MajorGridThickness,
             MajorGridColor
         );
+
+        _roadEnvironment = MomtRoadMeshBuilder.CreateRoadLayer();
+    }
+
+    private void ApplyGroundTexture(string textureUrl)
+    {
+        if (string.IsNullOrWhiteSpace(textureUrl) || textureUrl == _activeMapTextureUrl)
+        {
+            return;
+        }
+
+        _activeMapTextureUrl = textureUrl;
+        StartCoroutine(LoadGroundTexture(textureUrl));
+    }
+
+    private IEnumerator LoadGroundTexture(string textureUrl)
+    {
+        using var request = UnityWebRequestTexture.GetTexture(textureUrl);
+        yield return request.SendWebRequest();
+
+        if (request.result != UnityWebRequest.Result.Success)
+        {
+            Debug.LogWarning($"[MOMT] Failed to load mosaic texture: {request.error}");
+            yield break;
+        }
+
+        SetGroundTexture(DownloadHandlerTexture.GetContent(request));
+    }
+
+    private void SetGroundTexture(Texture texture)
+    {
+        if (_groundMaterial == null || texture == null)
+        {
+            return;
+        }
+
+        _groundMaterial.mainTexture = texture;
+        _groundMaterial.color = Color.white;
+        if (_groundMaterial.HasProperty("_MainTex"))
+        {
+            _groundMaterial.SetTexture("_MainTex", texture);
+        }
+        if (_groundMaterial.HasProperty("_Color"))
+        {
+            _groundMaterial.SetColor("_Color", Color.white);
+        }
+    }
+
+    private void TryLoadEditorGroundTexture()
+    {
+#if UNITY_EDITOR
+        var unityProjectRoot = Directory.GetParent(Application.dataPath)?.FullName;
+        var repoRoot = unityProjectRoot == null
+            ? null
+            : Directory.GetParent(unityProjectRoot)?.FullName;
+        var mosaicPath = repoRoot == null
+            ? null
+            : Path.Combine(repoRoot, "dashboard", "public", "clean_mosaic_3_feathered.png");
+
+        if (string.IsNullOrWhiteSpace(mosaicPath) || !File.Exists(mosaicPath))
+        {
+            Debug.LogWarning("[MOMT] Editor mosaic texture not found.");
+            return;
+        }
+
+        var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+        if (!texture.LoadImage(File.ReadAllBytes(mosaicPath)))
+        {
+            Debug.LogWarning("[MOMT] Failed to decode editor mosaic texture.");
+            return;
+        }
+
+        texture.name = "clean_mosaic_3_feathered";
+        texture.wrapMode = TextureWrapMode.Clamp;
+        SetGroundTexture(texture);
+#endif
     }
 
     private void ApplyLiveVehicles(
