@@ -137,6 +137,56 @@ public static class MomtCoordinateMapper
         return mesh;
     }
 
+    public static Mesh CreateGridMesh(float spacing, float thickness)
+    {
+        var clampedSpacing = Mathf.Max(0.25f, spacing);
+        var clampedThickness = Mathf.Clamp(thickness, 0.01f, clampedSpacing * 0.45f);
+
+        var xMin = MosaicNorthingMin - OriginNorthing;
+        var xMax = MosaicNorthingMax - OriginNorthing;
+        var zMin = MosaicEastingMin - OriginEasting;
+        var zMax = MosaicEastingMax - OriginEasting;
+
+        var vertices = new System.Collections.Generic.List<Vector3>();
+        var triangles = new System.Collections.Generic.List<int>();
+        var uvs = new System.Collections.Generic.List<Vector2>();
+
+        AddGridLinesParallelToZ(
+            vertices,
+            triangles,
+            uvs,
+            xMin,
+            xMax,
+            zMin,
+            zMax,
+            clampedSpacing,
+            clampedThickness
+        );
+        AddGridLinesParallelToX(
+            vertices,
+            triangles,
+            uvs,
+            xMin,
+            xMax,
+            zMin,
+            zMax,
+            clampedSpacing,
+            clampedThickness
+        );
+
+        var mesh = new Mesh
+        {
+            name = $"MomtGrid_{clampedSpacing:0.##}_{clampedThickness:0.###}"
+        };
+
+        mesh.SetVertices(vertices);
+        mesh.SetTriangles(triangles, 0);
+        mesh.SetUVs(0, uvs);
+        mesh.RecalculateNormals();
+        mesh.RecalculateBounds();
+        return mesh;
+    }
+
     public static float GetVehicleHeight(string className)
     {
         return className switch
@@ -166,5 +216,168 @@ public static class MomtCoordinateMapper
         public float Width { get; }
         public float Length { get; }
         public float HeadingDegrees { get; }
+    }
+
+    private static void AddGridLinesParallelToZ(
+        System.Collections.Generic.List<Vector3> vertices,
+        System.Collections.Generic.List<int> triangles,
+        System.Collections.Generic.List<Vector2> uvs,
+        float xMin,
+        float xMax,
+        float zMin,
+        float zMax,
+        float spacing,
+        float thickness
+    )
+    {
+        AddLineStrip(vertices, triangles, uvs, xMin, zMin, xMin, zMax, thickness, true);
+        AddLineStrip(vertices, triangles, uvs, xMax, zMin, xMax, zMax, thickness, true);
+        AddLineStrip(vertices, triangles, uvs, 0f, zMin, 0f, zMax, thickness, true);
+
+        for (var offset = spacing; offset <= GroundWidth * 0.5f + 0.001f; offset += spacing)
+        {
+            var positive = offset;
+            var negative = -offset;
+
+            if (positive <= xMax + 0.001f)
+            {
+                AddLineStrip(
+                    vertices,
+                    triangles,
+                    uvs,
+                    positive,
+                    zMin,
+                    positive,
+                    zMax,
+                    thickness,
+                    true
+                );
+            }
+
+            if (negative >= xMin - 0.001f)
+            {
+                AddLineStrip(
+                    vertices,
+                    triangles,
+                    uvs,
+                    negative,
+                    zMin,
+                    negative,
+                    zMax,
+                    thickness,
+                    true
+                );
+            }
+        }
+    }
+
+    private static void AddGridLinesParallelToX(
+        System.Collections.Generic.List<Vector3> vertices,
+        System.Collections.Generic.List<int> triangles,
+        System.Collections.Generic.List<Vector2> uvs,
+        float xMin,
+        float xMax,
+        float zMin,
+        float zMax,
+        float spacing,
+        float thickness
+    )
+    {
+        AddLineStrip(vertices, triangles, uvs, xMin, zMin, xMax, zMin, thickness, false);
+        AddLineStrip(vertices, triangles, uvs, xMin, zMax, xMax, zMax, thickness, false);
+        AddLineStrip(vertices, triangles, uvs, xMin, 0f, xMax, 0f, thickness, false);
+
+        for (var offset = spacing; offset <= GroundLength * 0.5f + 0.001f; offset += spacing)
+        {
+            var positive = offset;
+            var negative = -offset;
+
+            if (positive <= zMax + 0.001f)
+            {
+                AddLineStrip(
+                    vertices,
+                    triangles,
+                    uvs,
+                    xMin,
+                    positive,
+                    xMax,
+                    positive,
+                    thickness,
+                    false
+                );
+            }
+
+            if (negative >= zMin - 0.001f)
+            {
+                AddLineStrip(
+                    vertices,
+                    triangles,
+                    uvs,
+                    xMin,
+                    negative,
+                    xMax,
+                    negative,
+                    thickness,
+                    false
+                );
+            }
+        }
+    }
+
+    private static void AddLineStrip(
+        System.Collections.Generic.List<Vector3> vertices,
+        System.Collections.Generic.List<int> triangles,
+        System.Collections.Generic.List<Vector2> uvs,
+        float startX,
+        float startZ,
+        float endX,
+        float endZ,
+        float thickness,
+        bool vertical
+    )
+    {
+        var halfThickness = thickness * 0.5f;
+        var start = new Vector3(startX, 0f, startZ);
+        var end = new Vector3(endX, 0f, endZ);
+
+        Vector3 offset;
+        if (vertical)
+        {
+            offset = new Vector3(halfThickness, 0f, 0f);
+        }
+        else
+        {
+            offset = new Vector3(0f, 0f, halfThickness);
+        }
+
+        var index = vertices.Count;
+        vertices.Add(start - offset);
+        vertices.Add(start + offset);
+        vertices.Add(end - offset);
+        vertices.Add(end + offset);
+
+        uvs.Add(new Vector2(0f, 0f));
+        uvs.Add(new Vector2(1f, 0f));
+        uvs.Add(new Vector2(0f, 1f));
+        uvs.Add(new Vector2(1f, 1f));
+
+        if (vertical)
+        {
+            triangles.Add(index + 0);
+            triangles.Add(index + 2);
+            triangles.Add(index + 1);
+            triangles.Add(index + 2);
+            triangles.Add(index + 3);
+            triangles.Add(index + 1);
+        }
+        else
+        {
+            triangles.Add(index + 0);
+            triangles.Add(index + 1);
+            triangles.Add(index + 2);
+            triangles.Add(index + 2);
+            triangles.Add(index + 1);
+            triangles.Add(index + 3);
+        }
     }
 }

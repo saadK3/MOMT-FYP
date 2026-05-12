@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.Networking;
@@ -13,9 +14,17 @@ public sealed class MomtDashboardBridge : MonoBehaviour
     private const float SymbolVerticalOffset = 0.24f;
     private const float JourneySampleScale = 0.55f;
     private const float JourneyLineHeight = 0.18f;
+    private const float GridSurfaceLift = 0.016f;
+    private const float MinorGridSpacing = 4f;
+    private const float MajorGridSpacing = 20f;
+    private const float MinorGridThickness = 0.08f;
+    private const float MajorGridThickness = 0.14f;
 
     private static readonly Color NeutralBodyColor = new Color(0.13f, 0.17f, 0.23f, 1f);
     private static readonly Color HaloColor = new Color(0.85f, 0.92f, 1f, 0.95f);
+    private static readonly Color GroundBaseColor = new Color(0.03f, 0.04f, 0.06f, 1f);
+    private static readonly Color MinorGridColor = new Color(0.90f, 0.93f, 0.98f, 0.26f);
+    private static readonly Color MajorGridColor = new Color(0.98f, 0.99f, 1f, 0.48f);
 
     private static readonly string[] SurfaceShaderCandidates =
     {
@@ -51,9 +60,14 @@ public sealed class MomtDashboardBridge : MonoBehaviour
     private MomtOrbitCamera _orbitCamera;
     private Camera _mainCamera;
     private GameObject _groundPlane;
+    private GameObject _minorGridPlane;
+    private GameObject _majorGridPlane;
+    private GameObject _roadEnvironment;
     private Material _groundMaterial;
+    private Material _minorGridMaterial;
+    private Material _majorGridMaterial;
     private MomtVehicleMarker _hoveredMarker;
-    private string _loadedTextureUrl;
+    private string _activeMapTextureUrl;
     private string _currentViewMode = "3d-live";
 
     private void Start()
@@ -76,14 +90,10 @@ public sealed class MomtDashboardBridge : MonoBehaviour
         }
 
         EnsureSceneScaffold();
+        ApplyGroundTexture(payload.mapTextureUrl);
         _currentViewMode = string.IsNullOrWhiteSpace(payload.viewMode)
             ? "3d-live"
             : payload.viewMode;
-
-        if (!string.IsNullOrWhiteSpace(payload.mapTextureUrl))
-        {
-            StartCoroutine(LoadGroundTexture(payload.mapTextureUrl));
-        }
 
         ApplyLiveVehicles(
             payload.liveVehicles,
@@ -124,39 +134,112 @@ public sealed class MomtDashboardBridge : MonoBehaviour
             return;
         }
 
+#if UNITY_EDITOR
+        if (GetComponent<MomtRoadPointProbe>() == null)
+        {
+            gameObject.AddComponent<MomtRoadPointProbe>();
+        }
+#endif
+
         _groundPlane = new GameObject("GroundPlane");
         var meshFilter = _groundPlane.AddComponent<MeshFilter>();
         meshFilter.sharedMesh = MomtCoordinateMapper.CreateGroundMesh();
 
         var meshRenderer = _groundPlane.AddComponent<MeshRenderer>();
-        _groundMaterial = CreateSurfaceMaterial(new Color(0.16f, 0.18f, 0.24f, 1f));
-        _groundMaterial.mainTextureScale = Vector2.one;
+        _groundMaterial = CreateSurfaceMaterial(GroundBaseColor);
         meshRenderer.material = _groundMaterial;
         meshRenderer.shadowCastingMode = ShadowCastingMode.Off;
-        meshRenderer.receiveShadows = true;
+        meshRenderer.receiveShadows = false;
+        TryLoadEditorGroundTexture();
+
+        _minorGridPlane = CreateGridPlane(
+            "GroundGridMinor",
+            MinorGridSpacing,
+            MinorGridThickness,
+            MinorGridColor
+        );
+        _majorGridPlane = CreateGridPlane(
+            "GroundGridMajor",
+            MajorGridSpacing,
+            MajorGridThickness,
+            MajorGridColor
+        );
+
+        _roadEnvironment = MomtRoadMeshBuilder.CreateRoadLayer();
+    }
+
+    private void ApplyGroundTexture(string textureUrl)
+    {
+        if (string.IsNullOrWhiteSpace(textureUrl) || textureUrl == _activeMapTextureUrl)
+        {
+            return;
+        }
+
+        _activeMapTextureUrl = textureUrl;
+        StartCoroutine(LoadGroundTexture(textureUrl));
     }
 
     private IEnumerator LoadGroundTexture(string textureUrl)
     {
-        if (string.Equals(_loadedTextureUrl, textureUrl, StringComparison.OrdinalIgnoreCase))
-        {
-            yield break;
-        }
-
         using var request = UnityWebRequestTexture.GetTexture(textureUrl);
         yield return request.SendWebRequest();
 
         if (request.result != UnityWebRequest.Result.Success)
         {
-            Debug.LogWarning($"Failed to load map texture: {request.error}");
+            Debug.LogWarning($"[MOMT] Failed to load mosaic texture: {request.error}");
             yield break;
         }
 
-        var texture = DownloadHandlerTexture.GetContent(request);
-        texture.wrapMode = TextureWrapMode.Clamp;
-        texture.filterMode = FilterMode.Bilinear;
+        SetGroundTexture(DownloadHandlerTexture.GetContent(request));
+    }
+
+    private void SetGroundTexture(Texture texture)
+    {
+        if (_groundMaterial == null || texture == null)
+        {
+            return;
+        }
+
         _groundMaterial.mainTexture = texture;
-        _loadedTextureUrl = textureUrl;
+        _groundMaterial.color = Color.white;
+        if (_groundMaterial.HasProperty("_MainTex"))
+        {
+            _groundMaterial.SetTexture("_MainTex", texture);
+        }
+        if (_groundMaterial.HasProperty("_Color"))
+        {
+            _groundMaterial.SetColor("_Color", Color.white);
+        }
+    }
+
+    private void TryLoadEditorGroundTexture()
+    {
+#if UNITY_EDITOR
+        var unityProjectRoot = Directory.GetParent(Application.dataPath)?.FullName;
+        var repoRoot = unityProjectRoot == null
+            ? null
+            : Directory.GetParent(unityProjectRoot)?.FullName;
+        var mosaicPath = repoRoot == null
+            ? null
+            : Path.Combine(repoRoot, "dashboard", "public", "clean_mosaic_3_feathered.png");
+
+        if (string.IsNullOrWhiteSpace(mosaicPath) || !File.Exists(mosaicPath))
+        {
+            Debug.LogWarning("[MOMT] Editor mosaic texture not found.");
+            return;
+        }
+
+        var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+        if (!texture.LoadImage(File.ReadAllBytes(mosaicPath)))
+        {
+            Debug.LogWarning("[MOMT] Failed to decode editor mosaic texture.");
+            return;
+        }
+
+        texture.name = "clean_mosaic_3_feathered";
+        texture.wrapMode = TextureWrapMode.Clamp;
+        SetGroundTexture(texture);
+#endif
     }
 
     private void ApplyLiveVehicles(
@@ -1088,6 +1171,53 @@ public sealed class MomtDashboardBridge : MonoBehaviour
         };
 
         return material;
+    }
+
+    private Material CreateGridMaterial(Color color)
+    {
+        var material = new Material(FindShader(LineShaderCandidates))
+        {
+            color = color
+        };
+
+        if (material.HasProperty("_Color"))
+        {
+            material.SetColor("_Color", color);
+        }
+
+        return material;
+    }
+
+    private GameObject CreateGridPlane(
+        string objectName,
+        float spacing,
+        float thickness,
+        Color color
+    )
+    {
+        var gridObject = new GameObject(objectName);
+        gridObject.transform.SetParent(_groundPlane.transform, false);
+        gridObject.transform.localPosition = new Vector3(0f, GridSurfaceLift, 0f);
+
+        var meshFilter = gridObject.AddComponent<MeshFilter>();
+        meshFilter.sharedMesh = MomtCoordinateMapper.CreateGridMesh(spacing, thickness);
+
+        var meshRenderer = gridObject.AddComponent<MeshRenderer>();
+        var material = CreateGridMaterial(color);
+        meshRenderer.material = material;
+        meshRenderer.shadowCastingMode = ShadowCastingMode.Off;
+        meshRenderer.receiveShadows = false;
+
+        if (string.Equals(objectName, "GroundGridMinor", StringComparison.Ordinal))
+        {
+            _minorGridMaterial = material;
+        }
+        else if (string.Equals(objectName, "GroundGridMajor", StringComparison.Ordinal))
+        {
+            _majorGridMaterial = material;
+        }
+
+        return gridObject;
     }
 
     private Shader FindShader(string[] candidates)
