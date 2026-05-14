@@ -140,19 +140,7 @@ public static class MomtRoadMeshBuilder
             ),
         };
         var intersections = Array.Empty<IntersectionSpec>();
-        var intersectionPolygons = new[]
-        {
-            new PolygonSpec(
-                "MainIntersection",
-                new[]
-                {
-                    P(4252547f, -9072351f),
-                    P(4252556f, -9072331f),
-                    P(4252579f, -9072348f),
-                    P(4252569f, -9072373f),
-                }
-            ),
-        };
+        var intersectionPolygons = Array.Empty<PolygonSpec>();
         var laneMarkings = Array.Empty<LaneMarkingSpec>();
 
         foreach (var path in roadPaths)

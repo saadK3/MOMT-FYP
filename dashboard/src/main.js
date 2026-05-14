@@ -34,6 +34,8 @@ import { updateVideoPanels } from "./video-panels.js";
 const WS_URL = `ws://${window.location.hostname || "localhost"}:8765`;
 const PLOT_CONTAINER = "groundPlane";
 const UNITY_CONTAINER = "unityViewport";
+const UNITY_MOSAIC_TEXTURE_URL = "/intersection_3d_scene.png";
+const UNITY_MOSAIC_TEXTURE_VERSION = "2026-05-14-intersection-3d-scene";
 const MAX_CAMERA_EVENTS = 50;
 const URL_PARAMS = new URLSearchParams(window.location.search);
 const APP_MODE = (URL_PARAMS.get("mode") || "offline").toLowerCase();
@@ -631,10 +633,7 @@ function buildUnityStatePayload() {
     viewMode,
     timestamp: latestTimestamp,
     selectedGlobalId: selectedGlobalId ?? 0,
-    mapTextureUrl: new URL(
-      "/clean_mosaic_3_feathered.png",
-      window.location.origin,
-    ).toString(),
+    mapTextureUrl: buildUnityMosaicTextureUrl(),
     liveVehicles: activeVehicles.map((vehicle) => ({
       globalId: vehicle.global_id,
       className: vehicle.class,
@@ -651,6 +650,12 @@ function buildUnityStatePayload() {
     ),
     selectedJourney: serializeJourneyForUnity(selectedJourney),
   };
+}
+
+function buildUnityMosaicTextureUrl() {
+  const url = new URL(UNITY_MOSAIC_TEXTURE_URL, window.location.origin);
+  url.searchParams.set("v", UNITY_MOSAIC_TEXTURE_VERSION);
+  return url.toString();
 }
 
 function serializeSummaryForUnity(summary, activeVehicle = null) {

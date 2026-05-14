@@ -118,6 +118,7 @@ public static class MomtUnityBuild
             companyName = PlayerSettings.companyName,
             productName = PlayerSettings.productName,
             productVersion = Application.unityVersion,
+            cacheVersion = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(),
         };
 
         var configJson = JsonUtility.ToJson(config, true);
@@ -134,5 +135,6 @@ public static class MomtUnityBuild
         public string companyName;
         public string productName;
         public string productVersion;
+        public string cacheVersion;
     }
 }

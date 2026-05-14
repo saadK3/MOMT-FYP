@@ -189,6 +189,22 @@ RoadEnvironment
 
 The mosaic is still the fixed reference layer. Do not move, rotate, or rescale it.
 
+The 3D dashboard view uses this enhanced texture:
+
+```text
+dashboard/public/intersection_3d_scene.png
+```
+
+It is applied to the same fixed `GroundPlane` mesh and the same mosaic bounds.
+The 2D Plotly ground plane still uses:
+
+```text
+dashboard/public/clean_mosaic_3_feathered.png
+```
+
+Keep both images the same pixel geometry and scene alignment. Only replace the
+3D texture when making visual/elevation improvements for Unity.
+
 The coordinate mapper is:
 
 ```text
