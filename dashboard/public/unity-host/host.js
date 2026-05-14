@@ -51,15 +51,18 @@ window.addEventListener("message", (event) => {
 
 async function init() {
   const buildConfig = await loadBuildConfig();
-  const createUnityInstance = await loadLoader(resolveBuildUrl(buildConfig.loaderUrl));
+  const cacheVersion = buildConfig.cacheVersion || buildConfig.productVersion || Date.now();
+  const createUnityInstance = await loadLoader(
+    resolveBuildUrl(buildConfig.loaderUrl, cacheVersion),
+  );
 
   unityInstance = await createUnityInstance(canvas, {
-    dataUrl: resolveBuildUrl(buildConfig.dataUrl),
-    frameworkUrl: resolveBuildUrl(buildConfig.frameworkUrl),
-    codeUrl: resolveBuildUrl(buildConfig.codeUrl),
+    dataUrl: resolveBuildUrl(buildConfig.dataUrl, cacheVersion),
+    frameworkUrl: resolveBuildUrl(buildConfig.frameworkUrl, cacheVersion),
+    codeUrl: resolveBuildUrl(buildConfig.codeUrl, cacheVersion),
     companyName: buildConfig.companyName,
     productName: buildConfig.productName,
-    productVersion: buildConfig.productVersion,
+    productVersion: cacheVersion,
     streamingAssetsUrl: `${UNITY_WEBGL_BASE}StreamingAssets`,
   });
 
@@ -93,8 +96,12 @@ async function loadLoader(loaderUrl) {
   });
 }
 
-function resolveBuildUrl(url) {
-  return new URL(url, `${window.location.origin}${UNITY_WEBGL_BASE}`).toString();
+function resolveBuildUrl(url, cacheVersion) {
+  const resolved = new URL(url, `${window.location.origin}${UNITY_WEBGL_BASE}`);
+  if (cacheVersion) {
+    resolved.searchParams.set("v", cacheVersion);
+  }
+  return resolved.toString();
 }
 
 function flushState() {
