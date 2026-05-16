@@ -56,7 +56,7 @@ The module is organized into modular layers:
 ![Ground Plane View](docs/assets/ground_plane.png)
 
 ### Unity Rendering View
-![Unity Rendering View](docs/assets/unity_rendering.png)
+![Unity Rendering View](docs/assets/unity_rendering.jpeg)
 
 
 ## Use Cases
